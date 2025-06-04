@@ -1,0 +1,546 @@
+# ゆっくり動画自動生成ツール - フロー定義
+
+# プロジェクト全体の設定
+project:
+  name: "ゆっくり動画自動生成ツール"
+  version: "1.0.0"
+  output_base_dir: "projects"
+  temp_dir: "temp"
+  assets_dir: "assets"
+
+# ディレクトリ構造定義
+directory_structure:
+  project_root: "{output_base_dir}/{project_id}"
+  subdirectories:
+    - "01_theme"           # テーマ関連
+    - "02_script"          # スクリプト関連
+    - "03_title"           # タイトル関連
+    - "04_audio"           # 音声ファイル
+    - "05_character"       # 立ち絵・キャラクター
+    - "06_background"      # 背景画像・動画
+    - "07_subtitle"        # 字幕関連
+    - "08_sound_effects"   # 効果音・BGM
+    - "09_illustrations"   # 挿絵
+    - "10_video_output"    # 動画出力
+    - "11_youtube"         # YouTube投稿関連
+    - "logs"               # ログファイル
+
+# 処理フロー定義
+workflows:
+  
+  # 1. テーマ選定
+  theme_selection:
+    step_id: 1
+    name: "テーマ選定"
+    description: "動画のテーマを自動または手動で選定"
+    
+    inputs:
+      user_preferences:
+        type: "json"
+        path: "{project_root}/01_theme/user_preferences.json"
+        schema:
+          genre_history: "array[string]"
+          preferred_genres: "array[string]"
+          excluded_genres: "array[string]"
+          target_audience: "string"
+          content_style: "string"
+      
+      llm_config:
+        type: "yaml"
+        path: "config/llm_config.yaml"
+        
+    outputs:
+      selected_theme:
+        type: "json"
+        path: "{project_root}/01_theme/selected_theme.json"
+        schema:
+          theme: "string"
+          genre: "string"
+          target_length_minutes: "integer"
+          selection_method: "string"  # auto/manual
+          confidence_score: "float"
+          alternative_themes: "array[string]"
+      
+      theme_candidates:
+        type: "json"
+        path: "{project_root}/01_theme/theme_candidates.json"
+        schema:
+          candidates: "array[object]"
+          generation_timestamp: "string"
+    
+    processing:
+      llm_model: "gpt-4"
+      max_candidates: 10
+      retry_count: 3
+
+  # 2. スクリプト生成
+  script_generation:
+    step_id: 2
+    name: "スクリプト生成"
+    description: "テーマに基づいてスクリプトを生成"
+    
+    inputs:
+      selected_theme:
+        type: "json"
+        path: "{project_root}/01_theme/selected_theme.json"
+      
+      script_config:
+        type: "json"
+        path: "{project_root}/02_script/script_config.json"
+        schema:
+          target_duration_minutes: "integer"
+          speaker_count: "integer"  # 1 or 2
+          speaker_names: "array[string]"
+          tone: "string"  # casual/formal/educational
+          
+    outputs:
+      script:
+        type: "json"
+        path: "{project_root}/02_script/script.json"
+        schema:
+          title: "string"
+          total_estimated_duration: "float"
+          segments: "array[object]"
+          # segments内の各object構造:
+          # - speaker: string (reimu/marisa)
+          # - text: string
+          # - emotion: string (normal/happy/angry/sad)
+          # - timing_hint: string
+          
+      script_text:
+        type: "txt"
+        path: "{project_root}/02_script/script.txt"
+        description: "プレーンテキスト版スクリプト"
+
+  # 3. タイトル生成
+  title_generation:
+    step_id: 3
+    name: "タイトル生成"
+    description: "高CTRを狙ったタイトルを生成"
+    
+    inputs:
+      selected_theme:
+        type: "json"
+        path: "{project_root}/01_theme/selected_theme.json"
+      script:
+        type: "json"
+        path: "{project_root}/02_script/script.json"
+        
+    outputs:
+      titles:
+        type: "json"
+        path: "{project_root}/03_title/titles.json"
+        schema:
+          selected_title: "string"
+          candidates: "array[object]"
+          # candidates内の各object構造:
+          # - title: string
+          # - ctr_score: float
+          # - character_count: integer
+          # - keywords: array[string]
+      
+      title_analysis:
+        type: "json"
+        path: "{project_root}/03_title/title_analysis.json"
+        schema:
+          selected_title_analysis: "object"
+          seo_keywords: "array[string]"
+          estimated_ctr: "float"
+
+  # 4. 音声生成（TTS）
+  tts_generation:
+    step_id: 4
+    name: "音声生成"
+    description: "AIVIS Speech APIを使用した音声生成"
+    
+    inputs:
+      script:
+        type: "json"
+        path: "{project_root}/02_script/script.json"
+      
+      voice_config:
+        type: "yaml"
+        path: "config/voice_config.yaml"
+        
+    outputs:
+      audio_files:
+        type: "directory"
+        path: "{project_root}/04_audio/segments/"
+        description: "各セグメントの音声ファイル（WAV形式）"
+        
+      audio_metadata:
+        type: "json"
+        path: "{project_root}/04_audio/audio_metadata.json"
+        schema:
+          total_duration: "float"
+          segments: "array[object]"
+          # segments内の各object構造:
+          # - segment_id: integer
+          # - speaker: string
+          # - text: string
+          # - audio_file: string
+          # - duration: float
+          # - word_timestamps: array[object]
+          #   - word: string
+          #   - start_time: float
+          #   - end_time: float
+      
+      combined_audio:
+        type: "wav"
+        path: "{project_root}/04_audio/combined_audio.wav"
+        description: "結合された音声ファイル"
+
+  # 5. ゆっくり立ち絵合成
+  character_synthesis:
+    step_id: 5
+    name: "立ち絵合成"
+    description: "口パクと表情を同期した立ち絵動画生成"
+    
+    inputs:
+      audio_metadata:
+        type: "json"
+        path: "{project_root}/04_audio/audio_metadata.json"
+      
+      character_assets:
+        type: "directory"
+        path: "assets/characters/"
+        description: "立ち絵スプライト（各キャラ × 表情 × 口開閉）"
+      
+      character_config:
+        type: "yaml"
+        path: "config/character_config.yaml"
+        
+    outputs:
+      character_video:
+        type: "mp4"
+        path: "{project_root}/05_character/character_animation.mp4"
+        description: "立ち絵アニメーション動画（透明背景）"
+        
+      character_timeline:
+        type: "json"
+        path: "{project_root}/05_character/character_timeline.json"
+        schema:
+          timeline: "array[object]"
+          # timeline内の各object構造:
+          # - start_time: float
+          # - end_time: float
+          # - character: string
+          # - expression: string
+          # - mouth_state: string (open/closed)
+
+  # 6. 背景画像生成
+  background_generation:
+    step_id: 6
+    name: "背景画像生成"
+    description: "シーンに応じた背景画像を生成"
+    
+    inputs:
+      script:
+        type: "json"
+        path: "{project_root}/02_script/script.json"
+      
+      background_config:
+        type: "json"
+        path: "{project_root}/06_background/background_config.json"
+        schema:
+          switch_interval_seconds: "integer"
+          image_style: "string"
+          resolution: "object"
+          story_mode: "boolean"
+          
+    outputs:
+      background_images:
+        type: "directory"
+        path: "{project_root}/06_background/images/"
+        description: "生成された背景画像（PNG形式）"
+        
+      background_metadata:
+        type: "json"
+        path: "{project_root}/06_background/background_metadata.json"
+        schema:
+          images: "array[object]"
+          # images内の各object構造:
+          # - image_id: integer
+          # - filename: string
+          # - prompt: string
+          # - start_time: float
+          # - duration: float
+          # - animation_type: string
+
+  # 7. 背景動画生成（動きを付与）
+  background_animation:
+    step_id: 7
+    name: "背景動画生成"
+    description: "背景画像にKen Burnsエフェクト等を適用"
+    
+    inputs:
+      background_images:
+        type: "directory"
+        path: "{project_root}/06_background/images/"
+      
+      background_metadata:
+        type: "json"
+        path: "{project_root}/06_background/background_metadata.json"
+      
+      audio_metadata:
+        type: "json"
+        path: "{project_root}/04_audio/audio_metadata.json"
+        
+    outputs:
+      background_video:
+        type: "mp4"
+        path: "{project_root}/06_background/background_animation.mp4"
+        description: "動きを付けた背景動画（動画A）"
+        
+      animation_timeline:
+        type: "json"
+        path: "{project_root}/06_background/animation_timeline.json"
+
+  # 8. 字幕生成・適用
+  subtitle_generation:
+    step_id: 8
+    name: "字幕生成"
+    description: "音声タイムスタンプに基づく字幕生成"
+    
+    inputs:
+      script:
+        type: "json"
+        path: "{project_root}/02_script/script.json"
+      
+      audio_metadata:
+        type: "json"
+        path: "{project_root}/04_audio/audio_metadata.json"
+      
+      subtitle_config:
+        type: "yaml"
+        path: "config/subtitle_config.yaml"
+        
+    outputs:
+      subtitle_file:
+        type: "ass"
+        path: "{project_root}/07_subtitle/subtitle.ass"
+        description: "字幕ファイル（Advanced SSA形式）"
+        
+      subtitle_metadata:
+        type: "json"
+        path: "{project_root}/07_subtitle/subtitle_metadata.json"
+        schema:
+          total_lines: "integer"
+          subtitle_segments: "array[object]"
+          style_info: "object"
+
+  # 9. 動画合成（背景+立ち絵+字幕）
+  video_composition:
+    step_id: 9
+    name: "動画合成"
+    description: "背景、立ち絵、字幕を合成した動画生成"
+    
+    inputs:
+      background_video:
+        type: "mp4"
+        path: "{project_root}/06_background/background_animation.mp4"
+      
+      character_video:
+        type: "mp4"
+        path: "{project_root}/05_character/character_animation.mp4"
+      
+      combined_audio:
+        type: "wav"
+        path: "{project_root}/04_audio/combined_audio.wav"
+      
+      subtitle_file:
+        type: "ass"
+        path: "{project_root}/07_subtitle/subtitle.ass"
+        
+    outputs:
+      composed_video:
+        type: "mp4"
+        path: "{project_root}/10_video_output/composed_video.mp4"
+        description: "合成済み動画（動画B）"
+
+  # 10. 効果音・BGM追加
+  audio_enhancement:
+    step_id: 10
+    name: "効果音・BGM追加"
+    description: "効果音とBGMを適切なタイミングで挿入"
+    
+    inputs:
+      composed_video:
+        type: "mp4"
+        path: "{project_root}/10_video_output/composed_video.mp4"
+      
+      subtitle_metadata:
+        type: "json"
+        path: "{project_root}/07_subtitle/subtitle_metadata.json"
+      
+      audio_library:
+        type: "directory"
+        path: "assets/audio/"
+        
+    outputs:
+      enhanced_video:
+        type: "mp4"
+        path: "{project_root}/10_video_output/enhanced_video.mp4"
+        description: "効果音・BGM追加済み動画（動画C）"
+        
+      audio_timeline:
+        type: "json"
+        path: "{project_root}/08_sound_effects/audio_timeline.json"
+
+  # 11. 挿絵生成・挿入
+  illustration_insertion:
+    step_id: 11
+    name: "挿絵挿入"
+    description: "話題転換点での挿絵生成・挿入"
+    
+    inputs:
+      enhanced_video:
+        type: "mp4"
+        path: "{project_root}/10_video_output/enhanced_video.mp4"
+      
+      script:
+        type: "json"
+        path: "{project_root}/02_script/script.json"
+      
+      illustration_config:
+        type: "json"
+        path: "{project_root}/09_illustrations/illustration_config.json"
+        
+    outputs:
+      final_video:
+        type: "mp4"
+        path: "{project_root}/10_video_output/final_video.mp4"
+        description: "挿絵挿入済み最終動画（動画D）"
+        
+      illustrations:
+        type: "directory"
+        path: "{project_root}/09_illustrations/generated/"
+        
+      illustration_timeline:
+        type: "json"
+        path: "{project_root}/09_illustrations/illustration_timeline.json"
+
+  # 12. 動画エンコード・最終出力
+  final_encoding:
+    step_id: 12
+    name: "最終エンコード"
+    description: "最終的な動画エンコード・品質最適化"
+    
+    inputs:
+      final_video:
+        type: "mp4"
+        path: "{project_root}/10_video_output/final_video.mp4"
+      
+      encoding_config:
+        type: "yaml"
+        path: "config/encoding_config.yaml"
+        
+    outputs:
+      output_video:
+        type: "mp4"
+        path: "{project_root}/10_video_output/output_video.mp4"
+        description: "配信用最終動画ファイル（動画E）"
+        
+      encoding_report:
+        type: "json"
+        path: "{project_root}/10_video_output/encoding_report.json"
+
+  # 13. YouTube投稿
+  youtube_upload:
+    step_id: 13
+    name: "YouTube投稿"
+    description: "YouTube Data APIを使用した自動投稿"
+    
+    inputs:
+      output_video:
+        type: "mp4"
+        path: "{project_root}/10_video_output/output_video.mp4"
+      
+      titles:
+        type: "json"
+        path: "{project_root}/03_title/titles.json"
+      
+      youtube_config:
+        type: "yaml"
+        path: "config/youtube_config.yaml"
+        
+    outputs:
+      upload_result:
+        type: "json"
+        path: "{project_root}/11_youtube/upload_result.json"
+        schema:
+          video_id: "string"
+          video_url: "string"
+          upload_status: "string"
+          upload_timestamp: "string"
+          metadata: "object"
+
+# エラーハンドリング設定
+error_handling:
+  retry_settings:
+    max_retries: 3
+    retry_delay_seconds: 5
+    exponential_backoff: true
+    
+  recovery_options:
+    - skip_step
+    - use_fallback
+    - manual_intervention
+    
+  logging:
+    log_level: "INFO"
+    log_file: "{project_root}/logs/processing.log"
+    error_log: "{project_root}/logs/errors.log"
+    structured_log: "{project_root}/logs/structured.jsonl"
+
+# 設定ファイル定義
+config_files:
+  llm_config:
+    path: "config/llm_config.yaml"
+    description: "LLM API設定"
+    
+  voice_config:
+    path: "config/voice_config.yaml"
+    description: "音声合成設定"
+    
+  character_config:
+    path: "config/character_config.yaml"
+    description: "立ち絵・キャラクター設定"
+    
+  subtitle_config:
+    path: "config/subtitle_config.yaml"
+    description: "字幕スタイル設定"
+    
+  encoding_config:
+    path: "config/encoding_config.yaml"
+    description: "動画エンコード設定"
+    
+  youtube_config:
+    path: "config/youtube_config.yaml"
+    description: "YouTube投稿設定"
+
+# アセット定義
+assets:
+  characters:
+    path: "assets/characters/"
+    description: "立ち絵スプライト"
+    structure:
+      - "reimu/"
+      - "marisa/"
+      - "common/"
+      
+  audio:
+    path: "assets/audio/"
+    description: "効果音・BGMライブラリ"
+    structure:
+      - "bgm/"
+      - "sound_effects/"
+      - "jingles/"
+      
+  fonts:
+    path: "assets/fonts/"
+    description: "字幕用フォント"
+    
+  templates:
+    path: "assets/templates/"
+    description: "各種テンプレート" 

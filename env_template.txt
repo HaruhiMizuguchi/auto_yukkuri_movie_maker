@@ -1,0 +1,162 @@
+# ゆっくり動画自動生成ツール - 環境変数設定テンプレート
+# このファイルをコピーして .env にリネームし、実際の値を設定してください
+# 
+# コピー方法:
+# cp env_template.txt .env
+# 
+# その後、.envファイルの各値を実際のAPIキー等に置き換えてください
+
+# ===========================================
+# 【必須】LLM API 設定
+# ===========================================
+
+# OpenAI API (テーマ・スクリプト・タイトル生成用)
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_ORGANIZATION=your_openai_org_id_here
+
+# Anthropic Claude API (代替LLM、オプション)
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+
+# ===========================================
+# 【必須】TTS (音声合成) API 設定
+# ===========================================
+
+# AIVIS Speech API (推奨)
+AIVIS_API_KEY=your_aivis_api_key_here
+AIVIS_API_URL=https://api.aivis.co.jp/v1
+AIVIS_USER_ID=your_aivis_user_id_here
+
+# Azure Speech Services (代替TTS、オプション)
+AZURE_SPEECH_KEY=your_azure_speech_key_here
+AZURE_SPEECH_REGION=japaneast
+
+# Google Cloud Text-to-Speech (代替TTS、オプション)
+GOOGLE_APPLICATION_CREDENTIALS=path/to/your/google-credentials.json
+
+# ===========================================
+# 【必須】画像生成 API 設定
+# ===========================================
+
+# DALL-E (OpenAI) - OPENAI_API_KEY を使用 (上記で設定済み)
+
+# Stable Diffusion API (代替画像生成)
+STABILITY_API_KEY=your_stability_api_key_here
+
+# Leonardo AI (代替画像生成)
+LEONARDO_API_KEY=your_leonardo_api_key_here
+
+# ===========================================
+# 【オプション】YouTube Data API 設定
+# ===========================================
+
+# YouTube Data API v3 (自動投稿用)
+YOUTUBE_API_KEY=your_youtube_api_key_here
+YOUTUBE_CLIENT_ID=your_youtube_client_id_here
+YOUTUBE_CLIENT_SECRET=your_youtube_client_secret_here
+YOUTUBE_REDIRECT_URI=http://localhost:8080/oauth2callback
+
+# ===========================================
+# アプリケーション基本設定
+# ===========================================
+
+# 動作環境
+ENVIRONMENT=development
+
+# ログレベル (DEBUG/INFO/WARNING/ERROR)
+LOG_LEVEL=INFO
+
+# ディレクトリ設定
+TEMP_DIR=./temp
+PROJECTS_DIR=./projects
+ASSETS_DIR=./assets
+
+# 最大並列処理数
+MAX_WORKERS=4
+
+# セキュリティキー (32文字のランダム文字列)
+SECRET_KEY=please_generate_random_32_chars_here
+
+# ===========================================
+# FFmpeg設定 (自動検出されない場合のみ)
+# ===========================================
+
+# FFmpeg実行ファイルパス
+FFMPEG_PATH=/usr/bin/ffmpeg
+FFPROBE_PATH=/usr/bin/ffprobe
+
+# ===========================================
+# オプション設定
+# ===========================================
+
+# デバッグモード
+DEBUG=true
+
+# 通知設定 (Slack/Discord Webhook URL)
+WEBHOOK_URL=your_webhook_url_here
+
+# エラー監視 (Sentry DSN)
+SENTRY_DSN=your_sentry_dsn_here
+
+# ===========================================
+# API使用制限設定
+# ===========================================
+
+# 1日あたりのAPI使用制限
+DAILY_API_QUOTA_OPENAI=1000
+DAILY_API_QUOTA_AIVIS=500
+DAILY_API_QUOTA_IMAGE_GEN=100
+
+# 動画制限
+MAX_VIDEO_DURATION_MINUTES=30
+MAX_VIDEO_RESOLUTION=1920x1080
+
+# ===========================================
+# データベース設定
+# ===========================================
+
+# SQLite (ローカル開発用)
+DATABASE_URL=sqlite:///./data/yukkuri_tool.db
+
+# PostgreSQL (本番環境用)
+# DATABASE_URL=postgresql://username:password@host:port/database_name
+
+# ===========================================
+# キャッシュ設定
+# ===========================================
+
+# Redis (オプション)
+REDIS_URL=redis://localhost:6379/0
+
+# ファイルキャッシュ
+ENABLE_FILE_CACHE=true
+CACHE_EXPIRE_HOURS=24
+
+# ===========================================
+# 監視・メトリクス設定
+# ===========================================
+
+# Prometheus メトリクス
+ENABLE_METRICS=false
+METRICS_PORT=9090
+
+# ===========================================
+# プロキシ設定 (必要な場合のみ)
+# ===========================================
+
+# HTTP/HTTPS プロキシ
+HTTP_PROXY=http://proxy.example.com:8080
+HTTPS_PROXY=https://proxy.example.com:8080
+NO_PROXY=localhost,127.0.0.1,.local
+
+# ===========================================
+# 開発者向け設定
+# ===========================================
+
+# テストモード
+TEST_MODE=false
+
+# モック使用フラグ (開発時のみ)
+USE_MOCK_APIs=false
+
+# パフォーマンス監視
+ENABLE_PROFILING=false 

@@ -1,0 +1,330 @@
+# ゆっくり動画自動生成ツール - .gitignore
+
+# ===========================================
+# 機密情報 (重要: 絶対にコミットしない)
+# ===========================================
+
+# 環境変数ファイル
+.env
+.env.local
+.env.development
+.env.production
+.env.staging
+
+# APIキーファイル
+config/api_keys.json
+config/secrets.yaml
+keys/
+credentials/
+
+# Google Cloud サービスアカウントキー
+*.json
+google-credentials.json
+service-account-key.json
+
+# OAuth認証情報
+oauth2_credentials.json
+token.json
+refresh_token.txt
+
+# ===========================================
+# Python関連
+# ===========================================
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# pdm
+.pdm.toml
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# ===========================================
+# プロジェクト固有のファイル
+# ===========================================
+
+# 生成された動画ファイル
+projects/*/
+output/
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+# 音声ファイル
+*.wav
+*.mp3
+*.ogg
+*.flac
+*.aac
+
+# 画像ファイル (アセット除く)
+temp_images/
+generated_images/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+
+# ただし、アセットディレクトリの画像は除外しない
+!assets/**/*.png
+!assets/**/*.jpg
+!assets/**/*.jpeg
+!assets/**/*.gif
+
+# 一時ファイル
+temp/
+tmp/
+cache/
+.cache/
+
+# ログファイル
+logs/
+*.log
+*.log.*
+
+# データベースファイル
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# 設定ファイル (テンプレート以外)
+config/local_*
+config/production_*
+config/staging_*
+
+# バックアップファイル
+*.bak
+*.backup
+*.old
+
+# ===========================================
+# 開発ツール関連
+# ===========================================
+
+# IDE設定
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# ===========================================
+# 外部ツール・ライブラリ関連
+# ===========================================
+
+# FFmpeg一時ファイル
+ffmpeg_temp/
+
+# Node.js (フロントエンド用)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# ===========================================
+# 監視・プロファイリング
+# ===========================================
+
+# プロファイリング結果
+*.prof
+*.pstats
+profiling_results/
+
+# メトリクス
+metrics/
+monitoring/
+
+# ===========================================
+# 大容量ファイル・モデルデータ
+# ===========================================
+
+# MLモデル
+models/
+*.model
+*.pkl
+*.joblib
+
+# 大容量アセット
+assets/large/
+datasets/
+
+# ===========================================
+# 特殊なケース
+# ===========================================
+
+# コンパイル済みPython
+*.pyc
+
+# OS固有のファイル
+.DS_Store
+Thumbs.db
+
+# エディタ設定
+.editorconfig
+
+# テスト用一時ファイル
+test_output/
+test_assets/
+mock_data/
+
+# パッケージファイル
+*.tar.gz
+*.zip
+*.rar
+
+# 証明書ファイル
+*.pem
+*.crt
+*.key
+*.p12
+*.pfx 

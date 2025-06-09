@@ -21,10 +21,9 @@ ANTHROPIC_API_KEY=your_anthropic_api_key_here
 # 【必須】TTS (音声合成) API 設定
 # ===========================================
 
-# AIVIS Speech API (推奨)
-AIVIS_API_KEY=your_aivis_api_key_here
-AIVIS_API_URL=https://api.aivis.co.jp/v1
-AIVIS_USER_ID=your_aivis_user_id_here
+# AivisSpeech (ローカルサーバー、推奨)
+# APIキー不要 - ローカルで http://127.0.0.1:10101 で起動
+AIVIS_SERVER_URL=http://127.0.0.1:10101
 
 # Azure Speech Services (代替TTS、オプション)
 AZURE_SPEECH_KEY=your_azure_speech_key_here
@@ -103,7 +102,7 @@ SENTRY_DSN=your_sentry_dsn_here
 
 # 1日あたりのAPI使用制限
 DAILY_API_QUOTA_OPENAI=1000
-DAILY_API_QUOTA_AIVIS=500
+# AivisSpeech はローカルサーバーのため制限なし
 DAILY_API_QUOTA_IMAGE_GEN=100
 
 # 動画制限

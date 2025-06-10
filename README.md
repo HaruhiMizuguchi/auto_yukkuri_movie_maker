@@ -124,6 +124,7 @@ config/
 
 - [要件定義書](docs/requirements.md)
 - [フロー定義](docs/flow_definition.yaml)
+- [**🗄️ データベース設計**](docs/database_design.md) - **新しいデータ管理設計**
 - [開発ガイド](docs/development_guide.md)
 - [**📋 セットアップガイド**](docs/setup_guide.md) - **最初にお読みください**
 - [タスク分割](docs/task_breakdown.md)

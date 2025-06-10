@@ -1,487 +1,489 @@
-# ゆっくり動画自動生成ツール - フロー定義
+# ゆっくり動画自動生成ツール - フロー定義（データベース対応版）
 
 # プロジェクト全体の設定
 project:
   name: "ゆっくり動画自動生成ツール"
-  version: "1.0.0"
-  output_base_dir: "projects"
+  version: "2.0.0"
+  database_path: "data/yukkuri_tool.db"
+  projects_base_dir: "projects"
   temp_dir: "temp"
   assets_dir: "assets"
 
-# ディレクトリ構造定義
+# 新しいディレクトリ構造定義（データベース + ファイル管理）
 directory_structure:
-  project_root: "{output_base_dir}/{project_id}"
-  subdirectories:
-    - "01_theme"           # テーマ関連
-    - "02_script"          # スクリプト関連
-    - "03_title"           # タイトル関連
-    - "04_audio"           # 音声ファイル
-    - "05_character"       # 立ち絵・キャラクター
-    - "06_background"      # 背景画像・動画
-    - "07_subtitle"        # 字幕関連
-    - "08_sound_effects"   # 効果音・BGM
-    - "09_illustrations"   # 挿絵
-    - "10_video_output"    # 動画出力
-    - "11_youtube"         # YouTube投稿関連
-    - "logs"               # ログファイル
+  database: "data/yukkuri_tool.db"
+  project_root: "{projects_base_dir}/{project_id}"
+  project_subdirectories:
+    - "files/audio"          # 音声ファイル
+    - "files/video"          # 動画ファイル
+    - "files/images"         # 画像ファイル
+    - "files/scripts"        # スクリプト関連
+    - "files/metadata"       # メタデータファイル
+    - "logs"                 # ログファイル
+    - "cache"                # キャッシュファイル
 
-# 処理フロー定義
+# データ管理方式の説明
+data_management:
+  principle: "hybrid_database_file_system"
+  description: "メタデータ・進捗状況・設定はデータベース管理、大きなファイルはファイルシステム管理"
+  
+  database_managed:
+    - "プロジェクト基本情報"
+    - "ワークフロー実行状況"
+    - "ステップ間のデータ受け渡し"
+    - "API使用履歴"
+    - "統計情報"
+    
+  file_system_managed:
+    - "音声ファイル（WAV、MP3）"
+    - "動画ファイル（MP4）"
+    - "画像ファイル（PNG、JPG）"
+    - "ログファイル"
+    - "キャッシュファイル"
+
+# 処理フロー定義（データベース対応版）
 workflows:
   
   # 1. テーマ選定
   theme_selection:
     step_id: 1
-    name: "テーマ選定"
+    step_name: "theme_selection"
+    display_name: "テーマ選定"
     description: "動画のテーマを自動または手動で選定"
     
+    # 入力データ取得方法
     inputs:
-      user_preferences:
-        type: "json"
-        path: "{project_root}/01_theme/user_preferences.json"
-        schema:
-          genre_history: "array[string]"
-          preferred_genres: "array[string]"
-          excluded_genres: "array[string]"
-          target_audience: "string"
-          content_style: "string"
-      
-      llm_config:
-        type: "yaml"
-        path: "config/llm_config.yaml"
+      method: "database_and_config"
+      sources:
+        user_preferences:
+          source_type: "database"
+          table: "projects"
+          field: "config_json"
+          schema:
+            genre_history: "array[string]"
+            preferred_genres: "array[string]"
+            excluded_genres: "array[string]"
+            target_audience: "string"
+            content_style: "string"
         
+        llm_config:
+          source_type: "config_file"
+          path: "config/llm_config.yaml"
+    
+    # 出力データ保存方法
     outputs:
-      selected_theme:
-        type: "json"
-        path: "{project_root}/01_theme/selected_theme.json"
-        schema:
-          theme: "string"
-          genre: "string"
-          target_length_minutes: "integer"
-          selection_method: "string"  # auto/manual
-          confidence_score: "float"
-          alternative_themes: "array[string]"
+      method: "database_with_file_references"
+      database_fields:
+        # projectsテーブル更新
+        theme: "selected_theme.theme"
+        target_length_minutes: "selected_theme.target_length_minutes"
+        # workflow_stepsテーブル更新
+        output_summary_json: "完全な出力データ"
       
-      theme_candidates:
-        type: "json"
-        path: "{project_root}/01_theme/theme_candidates.json"
-        schema:
-          candidates: "array[object]"
-          generation_timestamp: "string"
+      file_outputs:
+        theme_candidates_file:
+          file_type: "metadata"
+          file_category: "output"
+          relative_path: "files/metadata/theme_candidates.json"
+          description: "テーマ候補一覧"
     
     processing:
-      llm_model: "gemini-2.0-flash-preview-image-generation"  # 開発時は安価なモデル
+      llm_model: "gemini-2.0-flash-preview-image-generation"
       max_candidates: 10
       retry_count: 3
 
   # 2. スクリプト生成
   script_generation:
     step_id: 2
-    name: "スクリプト生成"
+    step_name: "script_generation"
+    display_name: "スクリプト生成"
     description: "テーマに基づいてスクリプトを生成"
     
     inputs:
-      selected_theme:
-        type: "json"
-        path: "{project_root}/01_theme/selected_theme.json"
-      
-      script_config:
-        type: "json"
-        path: "{project_root}/02_script/script_config.json"
-        schema:
-          target_duration_minutes: "integer"
-          speaker_count: "integer"  # 1 or 2
-          speaker_names: "array[string]"
-          tone: "string"  # casual/formal/educational
-          
+      method: "database_query"
+      sources:
+        selected_theme:
+          source_type: "database"
+          query: "SELECT theme, target_length_minutes FROM projects WHERE id = ?"
+        
+        previous_step_output:
+          source_type: "database"
+          table: "workflow_steps"
+          where: "project_id = ? AND step_name = 'theme_selection' AND status = 'completed'"
+        
+        script_config:
+          source_type: "project_config"
+          config_key: "script_generation"
+          default_values:
+            target_duration_minutes: 5
+            speaker_count: 2
+            speaker_names: ["reimu", "marisa"]
+            tone: "casual"
+    
     outputs:
-      script:
-        type: "json"
-        path: "{project_root}/02_script/script.json"
-        schema:
-          title: "string"
-          total_estimated_duration: "float"
-          segments: "array[object]"
-          # segments内の各object構造:
-          # - speaker: string (reimu/marisa)
-          # - text: string
-          # - emotion: string (normal/happy/angry/sad)
-          # - timing_hint: string
-          
-      script_text:
-        type: "txt"
-        path: "{project_root}/02_script/script.txt"
-        description: "プレーンテキスト版スクリプト"
+      method: "database_with_files"
+      database_fields:
+        estimated_duration: "script.total_estimated_duration"
+      
+      file_outputs:
+        script_json:
+          file_type: "script"
+          file_category: "output"
+          relative_path: "files/scripts/script.json"
+          description: "構造化スクリプトデータ"
+        
+        script_text:
+          file_type: "script"
+          file_category: "output"
+          relative_path: "files/scripts/script.txt"
+          description: "プレーンテキスト版スクリプト"
 
   # 3. タイトル生成
   title_generation:
     step_id: 3
-    name: "タイトル生成"
+    step_name: "title_generation"
+    display_name: "タイトル生成"
     description: "高CTRを狙ったタイトルを生成"
     
     inputs:
-      selected_theme:
-        type: "json"
-        path: "{project_root}/01_theme/selected_theme.json"
-      script:
-        type: "json"
-        path: "{project_root}/02_script/script.json"
+      method: "multi_source"
+      sources:
+        theme_data:
+          source_type: "database"
+          table: "projects"
+          fields: ["theme", "target_length_minutes"]
         
+        script_data:
+          source_type: "file_reference"
+          file_query: "project_id = ? AND step_name = 'script_generation' AND file_type = 'script'"
+    
     outputs:
-      titles:
-        type: "json"
-        path: "{project_root}/03_title/titles.json"
-        schema:
-          selected_title: "string"
-          candidates: "array[object]"
-          # candidates内の各object構造:
-          # - title: string
-          # - ctr_score: float
-          # - character_count: integer
-          # - keywords: array[string]
-      
-      title_analysis:
-        type: "json"
-        path: "{project_root}/03_title/title_analysis.json"
-        schema:
-          selected_title_analysis: "object"
-          seo_keywords: "array[string]"
-          estimated_ctr: "float"
+      method: "database_primary"
+      database_fields:
+        selected_title: "titles.selected_title"
+        
+      file_outputs:
+        title_analysis:
+          file_type: "metadata"
+          file_category: "output"
+          relative_path: "files/metadata/title_analysis.json"
 
   # 4. 音声生成（TTS）
   tts_generation:
     step_id: 4
-    name: "音声生成"
+    step_name: "tts_generation"
+    display_name: "音声生成"
     description: "AIVIS Speech APIを使用した音声生成"
     
     inputs:
-      script:
-        type: "json"
-        path: "{project_root}/02_script/script.json"
-      
-      voice_config:
-        type: "yaml"
-        path: "config/voice_config.yaml"
+      method: "file_based"
+      sources:
+        script_data:
+          source_type: "file_reference"
+          file_query: "step_name = 'script_generation' AND file_type = 'script'"
         
+        voice_config:
+          source_type: "config_file"
+          path: "config/voice_config.yaml"
+    
     outputs:
-      audio_files:
-        type: "directory"
-        path: "{project_root}/04_audio/segments/"
-        description: "各セグメントの音声ファイル（WAV形式）"
+      method: "files_with_metadata"
+      file_outputs:
+        audio_segments:
+          file_type: "audio"
+          file_category: "intermediate"
+          relative_path: "files/audio/segments/"
+          description: "各セグメントの音声ファイル（WAV形式）"
         
-      audio_metadata:
-        type: "json"
-        path: "{project_root}/04_audio/audio_metadata.json"
-        schema:
-          total_duration: "float"
-          segments: "array[object]"
-          # segments内の各object構造:
-          # - segment_id: integer
-          # - speaker: string
-          # - text: string
-          # - audio_file: string
-          # - duration: float
-          # - word_timestamps: array[object]
-          #   - word: string
-          #   - start_time: float
-          #   - end_time: float
-      
-      combined_audio:
-        type: "wav"
-        path: "{project_root}/04_audio/combined_audio.wav"
-        description: "結合された音声ファイル"
+        combined_audio:
+          file_type: "audio"
+          file_category: "output"
+          relative_path: "files/audio/combined.wav"
+          description: "結合された音声ファイル"
+        
+        audio_metadata:
+          file_type: "metadata"
+          file_category: "output"
+          relative_path: "files/metadata/audio_metadata.json"
+          description: "タイムスタンプ情報"
 
-  # 5. ゆっくり立ち絵合成
+  # 5. 立ち絵アニメーション
   character_synthesis:
     step_id: 5
-    name: "立ち絵合成"
+    step_name: "character_synthesis"
+    display_name: "立ち絵合成"
     description: "口パクと表情を同期した立ち絵動画生成"
     
     inputs:
-      audio_metadata:
-        type: "json"
-        path: "{project_root}/04_audio/audio_metadata.json"
-      
-      character_assets:
-        type: "directory"
-        path: "assets/characters/"
-        description: "立ち絵スプライト（各キャラ × 表情 × 口開閉）"
-      
-      character_config:
-        type: "yaml"
-        path: "config/character_config.yaml"
+      method: "metadata_and_assets"
+      sources:
+        audio_metadata:
+          source_type: "file_reference"
+          file_query: "step_name = 'tts_generation' AND file_type = 'metadata'"
         
+        character_assets:
+          source_type: "assets"
+          path: "assets/characters/"
+        
+        character_config:
+          source_type: "config_file"
+          path: "config/character_config.yaml"
+    
     outputs:
-      character_video:
-        type: "mp4"
-        path: "{project_root}/05_character/character_animation.mp4"
-        description: "立ち絵アニメーション動画（透明背景）"
-        
-      character_timeline:
-        type: "json"
-        path: "{project_root}/05_character/character_timeline.json"
-        schema:
-          timeline: "array[object]"
-          # timeline内の各object構造:
-          # - start_time: float
-          # - end_time: float
-          # - character: string
-          # - expression: string
-          # - mouth_state: string (open/closed)
+      method: "video_files"
+      file_outputs:
+        character_video:
+          file_type: "video"
+          file_category: "intermediate"
+          relative_path: "files/video/character_animation.mp4"
+          description: "立ち絵アニメーション動画（透明背景）"
 
-  # 6. 背景画像生成
+  # 6. 背景生成
   background_generation:
     step_id: 6
-    name: "背景画像生成"
+    step_name: "background_generation"
+    display_name: "背景画像生成"
     description: "シーンに応じた背景画像を生成"
     
     inputs:
-      script:
-        type: "json"
-        path: "{project_root}/02_script/script.json"
-      
-      background_config:
-        type: "json"
-        path: "{project_root}/06_background/background_config.json"
-        schema:
-          switch_interval_seconds: "integer"
-          image_style: "string"
-          resolution: "object"
-          story_mode: "boolean"
-          
-      image_generation_config:
-        type: "yaml"
-        path: "config/image_generation_config.yaml"
-          
-    outputs:
-      background_images:
-        type: "directory"
-        path: "{project_root}/06_background/images/"
-        description: "生成された背景画像（PNG形式）"
+      method: "script_based"
+      sources:
+        script_content:
+          source_type: "file_reference"
+          file_query: "step_name = 'script_generation' AND file_type = 'script'"
         
-      background_metadata:
-        type: "json"
-        path: "{project_root}/06_background/background_metadata.json"
-        schema:
-          images: "array[object]"
-          # images内の各object構造:
-          # - image_id: integer
-          # - filename: string
-          # - prompt: string
-          # - start_time: float
-          # - duration: float
-          # - animation_type: string
+        image_generation_config:
+          source_type: "config_file"
+          path: "config/image_generation_config.yaml"
+    
+    outputs:
+      method: "image_collection"
+      file_outputs:
+        background_images:
+          file_type: "image"
+          file_category: "intermediate"
+          relative_path: "files/images/backgrounds/"
+          description: "生成された背景画像（PNG形式）"
 
-  # 7. 背景動画生成（動きを付与）
+  # 7. 背景動画生成
   background_animation:
     step_id: 7
-    name: "背景動画生成"
+    step_name: "background_animation"
+    display_name: "背景動画生成"
     description: "背景画像にKen Burnsエフェクト等を適用"
     
     inputs:
-      background_images:
-        type: "directory"
-        path: "{project_root}/06_background/images/"
-      
-      background_metadata:
-        type: "json"
-        path: "{project_root}/06_background/background_metadata.json"
-      
-      audio_metadata:
-        type: "json"
-        path: "{project_root}/04_audio/audio_metadata.json"
+      method: "images_and_audio"
+      sources:
+        background_images:
+          source_type: "file_reference"
+          file_query: "step_name = 'background_generation' AND file_type = 'image'"
         
+        audio_timing:
+          source_type: "file_reference"
+          file_query: "step_name = 'tts_generation' AND file_type = 'metadata'"
+    
     outputs:
-      background_video:
-        type: "mp4"
-        path: "{project_root}/06_background/background_animation.mp4"
-        description: "動きを付けた背景動画（動画A）"
-        
-      animation_timeline:
-        type: "json"
-        path: "{project_root}/06_background/animation_timeline.json"
+      method: "video_output"
+      file_outputs:
+        background_video:
+          file_type: "video"
+          file_category: "intermediate"
+          relative_path: "files/video/background_animation.mp4"
+          description: "動きを付けた背景動画"
 
-  # 8. 字幕生成・適用
+  # 8. 字幕生成
   subtitle_generation:
     step_id: 8
-    name: "字幕生成"
+    step_name: "subtitle_generation"
+    display_name: "字幕生成"
     description: "音声タイムスタンプに基づく字幕生成"
     
     inputs:
-      script:
-        type: "json"
-        path: "{project_root}/02_script/script.json"
-      
-      audio_metadata:
-        type: "json"
-        path: "{project_root}/04_audio/audio_metadata.json"
-      
-      subtitle_config:
-        type: "yaml"
-        path: "config/subtitle_config.yaml"
+      method: "script_and_timing"
+      sources:
+        script_data:
+          source_type: "file_reference"
+          file_query: "step_name = 'script_generation' AND file_type = 'script'"
         
+        audio_metadata:
+          source_type: "file_reference"
+          file_query: "step_name = 'tts_generation' AND file_type = 'metadata'"
+        
+        subtitle_config:
+          source_type: "config_file"
+          path: "config/subtitle_config.yaml"
+    
     outputs:
-      subtitle_file:
-        type: "ass"
-        path: "{project_root}/07_subtitle/subtitle.ass"
-        description: "字幕ファイル（Advanced SSA形式）"
-        
-      subtitle_metadata:
-        type: "json"
-        path: "{project_root}/07_subtitle/subtitle_metadata.json"
-        schema:
-          total_lines: "integer"
-          subtitle_segments: "array[object]"
-          style_info: "object"
+      method: "subtitle_files"
+      file_outputs:
+        subtitle_file:
+          file_type: "subtitle"
+          file_category: "intermediate"
+          relative_path: "files/metadata/subtitle.ass"
+          description: "字幕ファイル（Advanced SSA形式）"
 
-  # 9. 動画合成（背景+立ち絵+字幕）
+  # 9. 動画合成
   video_composition:
     step_id: 9
-    name: "動画合成"
-    description: "背景、立ち絵、字幕を合成した動画生成"
+    step_name: "video_composition"
+    display_name: "動画合成"
+    description: "背景、立ち絵、字幕、音声を合成"
     
     inputs:
-      background_video:
-        type: "mp4"
-        path: "{project_root}/06_background/background_animation.mp4"
-      
-      character_video:
-        type: "mp4"
-        path: "{project_root}/05_character/character_animation.mp4"
-      
-      combined_audio:
-        type: "wav"
-        path: "{project_root}/04_audio/combined_audio.wav"
-      
-      subtitle_file:
-        type: "ass"
-        path: "{project_root}/07_subtitle/subtitle.ass"
+      method: "multi_media"
+      sources:
+        background_video:
+          source_type: "file_reference"
+          file_query: "step_name = 'background_animation' AND file_type = 'video'"
         
+        character_video:
+          source_type: "file_reference"
+          file_query: "step_name = 'character_synthesis' AND file_type = 'video'"
+        
+        combined_audio:
+          source_type: "file_reference"
+          file_query: "step_name = 'tts_generation' AND file_type = 'audio' AND file_category = 'output'"
+        
+        subtitle_file:
+          source_type: "file_reference"
+          file_query: "step_name = 'subtitle_generation' AND file_type = 'subtitle'"
+    
     outputs:
-      composed_video:
-        type: "mp4"
-        path: "{project_root}/10_video_output/composed_video.mp4"
-        description: "合成済み動画（動画B）"
+      method: "video_output"
+      file_outputs:
+        composed_video:
+          file_type: "video"
+          file_category: "intermediate"
+          relative_path: "files/video/composed_video.mp4"
+          description: "基本合成済み動画"
 
   # 10. 効果音・BGM追加
   audio_enhancement:
     step_id: 10
-    name: "効果音・BGM追加"
+    step_name: "audio_enhancement"
+    display_name: "効果音・BGM追加"
     description: "効果音とBGMを適切なタイミングで挿入"
     
     inputs:
-      composed_video:
-        type: "mp4"
-        path: "{project_root}/10_video_output/composed_video.mp4"
-      
-      subtitle_metadata:
-        type: "json"
-        path: "{project_root}/07_subtitle/subtitle_metadata.json"
-      
-      audio_library:
-        type: "directory"
-        path: "assets/audio/"
+      method: "video_and_library"
+      sources:
+        composed_video:
+          source_type: "file_reference"
+          file_query: "step_name = 'video_composition' AND file_type = 'video'"
         
+        subtitle_timing:
+          source_type: "file_reference"
+          file_query: "step_name = 'subtitle_generation' AND file_type = 'subtitle'"
+        
+        audio_library:
+          source_type: "assets"
+          path: "assets/audio/"
+    
     outputs:
-      enhanced_video:
-        type: "mp4"
-        path: "{project_root}/10_video_output/enhanced_video.mp4"
-        description: "効果音・BGM追加済み動画（動画C）"
-        
-      audio_timeline:
-        type: "json"
-        path: "{project_root}/08_sound_effects/audio_timeline.json"
+      method: "enhanced_video"
+      file_outputs:
+        enhanced_video:
+          file_type: "video"
+          file_category: "intermediate"
+          relative_path: "files/video/enhanced_video.mp4"
+          description: "効果音・BGM追加済み動画"
 
-  # 11. 挿絵生成・挿入
+  # 11. 挿絵挿入
   illustration_insertion:
     step_id: 11
-    name: "挿絵挿入"
+    step_name: "illustration_insertion"
+    display_name: "挿絵挿入"
     description: "話題転換点での挿絵生成・挿入"
     
     inputs:
-      enhanced_video:
-        type: "mp4"
-        path: "{project_root}/10_video_output/enhanced_video.mp4"
-      
-      script:
-        type: "json"
-        path: "{project_root}/02_script/script.json"
-      
-      illustration_config:
-        type: "json"
-        path: "{project_root}/09_illustrations/illustration_config.json"
+      method: "video_and_analysis"
+      sources:
+        enhanced_video:
+          source_type: "file_reference"
+          file_query: "step_name = 'audio_enhancement' AND file_type = 'video'"
         
-      image_generation_config:
-        type: "yaml"
-        path: "config/image_generation_config.yaml"
-        
+        script_content:
+          source_type: "file_reference"
+          file_query: "step_name = 'script_generation' AND file_type = 'script'"
+    
     outputs:
-      final_video:
-        type: "mp4"
-        path: "{project_root}/10_video_output/final_video.mp4"
-        description: "挿絵挿入済み最終動画（動画D）"
+      method: "final_video"
+      file_outputs:
+        final_video:
+          file_type: "video"
+          file_category: "output"
+          relative_path: "files/video/final_video.mp4"
+          description: "挿絵挿入済み動画"
         
-      illustrations:
-        type: "directory"
-        path: "{project_root}/09_illustrations/generated/"
-        
-      illustration_timeline:
-        type: "json"
-        path: "{project_root}/09_illustrations/illustration_timeline.json"
+        illustrations:
+          file_type: "image"
+          file_category: "intermediate"
+          relative_path: "files/images/illustrations/"
+          description: "生成された挿絵"
 
-  # 12. 動画エンコード・最終出力
+  # 12. 最終エンコード
   final_encoding:
     step_id: 12
-    name: "最終エンコード"
-    description: "最終的な動画エンコード・品質最適化"
+    step_name: "final_encoding"
+    display_name: "最終エンコード"
+    description: "配信用最終動画の生成"
     
     inputs:
-      final_video:
-        type: "mp4"
-        path: "{project_root}/10_video_output/final_video.mp4"
-      
-      encoding_config:
-        type: "yaml"
-        path: "config/encoding_config.yaml"
+      method: "video_optimization"
+      sources:
+        final_video:
+          source_type: "file_reference"
+          file_query: "step_name = 'illustration_insertion' AND file_type = 'video' AND file_category = 'output'"
         
+        encoding_config:
+          source_type: "config_file"
+          path: "config/encoding_config.yaml"
+    
     outputs:
-      output_video:
-        type: "mp4"
-        path: "{project_root}/10_video_output/output_video.mp4"
-        description: "配信用最終動画ファイル（動画E）"
-        
-      encoding_report:
-        type: "json"
-        path: "{project_root}/10_video_output/encoding_report.json"
+      method: "final_output"
+      file_outputs:
+        output_video:
+          file_type: "video"
+          file_category: "final"
+          relative_path: "files/video/output_video.mp4"
+          description: "配信用最終動画ファイル"
+      
+      database_fields:
+        final_video_path: "files/video/output_video.mp4"
+        final_file_size: "ファイルサイズ（バイト）"
 
   # 13. YouTube投稿
   youtube_upload:
     step_id: 13
-    name: "YouTube投稿"
+    step_name: "youtube_upload"
+    display_name: "YouTube投稿"
     description: "YouTube Data APIを使用した自動投稿"
     
     inputs:
-      output_video:
-        type: "mp4"
-        path: "{project_root}/10_video_output/output_video.mp4"
-      
-      titles:
-        type: "json"
-        path: "{project_root}/03_title/titles.json"
-      
-      youtube_config:
-        type: "yaml"
-        path: "config/youtube_config.yaml"
+      method: "video_and_metadata"
+      sources:
+        output_video:
+          source_type: "file_reference"
+          file_query: "step_name = 'final_encoding' AND file_type = 'video' AND file_category = 'final'"
         
+        video_title:
+          source_type: "database"
+          table: "workflow_steps"
+          where: "project_id = ? AND step_name = 'title_generation'"
+          field: "output_summary_json"
+        
+        youtube_config:
+          source_type: "config_file"
+          path: "config/youtube_config.yaml"
+    
     outputs:
-      upload_result:
-        type: "json"
-        path: "{project_root}/11_youtube/upload_result.json"
-        schema:
-          video_id: "string"
-          video_url: "string"
-          upload_status: "string"
-          upload_timestamp: "string"
-          metadata: "object"
+      method: "database_primary"
+      database_fields:
+        youtube_video_id: "upload_result.video_id"
+        youtube_url: "upload_result.video_url"
+        upload_status: "upload_result.status"
+        upload_timestamp: "upload_result.timestamp"
 
 # エラーハンドリング設定
 error_handling:
@@ -491,17 +493,37 @@ error_handling:
     exponential_backoff: true
     
   recovery_options:
-    - skip_step
-    - use_fallback
-    - manual_intervention
+    - "retry_step"
+    - "skip_step"
+    - "use_fallback"
+    - "manual_intervention"
     
   logging:
+    database_logging: true
+    file_logging: true
     log_level: "INFO"
-    log_file: "{project_root}/logs/processing.log"
-    error_log: "{project_root}/logs/errors.log"
-    structured_log: "{project_root}/logs/structured.jsonl"
 
-# 設定ファイル定義
+# 新しいデータアクセス関数定義
+data_access_patterns:
+  
+  # ステップ間データ受け渡し
+  get_step_input:
+    description: "前のステップの出力を現在のステップの入力として取得"
+    implementation: "ProjectRepository.get_step_input(project_id, step_name)"
+  
+  save_step_output:
+    description: "ステップの出力をデータベース + ファイルシステムに保存"
+    implementation: "ProjectRepository.save_step_result(step_name, data, files)"
+  
+  get_project_status:
+    description: "プロジェクト全体の進捗状況を取得"
+    implementation: "ProjectRepository.get_project_status(project_id)"
+  
+  get_file_reference:
+    description: "ファイル参照情報を取得"
+    implementation: "ProjectRepository.get_file_by_query(project_id, query)"
+
+# 設定ファイル定義（変更なし）
 config_files:
   llm_config:
     path: "config/llm_config.yaml"
@@ -531,7 +553,7 @@ config_files:
     path: "config/image_generation_config.yaml"
     description: "画像生成AI設定"
 
-# アセット定義
+# アセット定義（変更なし）
 assets:
   characters:
     path: "assets/characters/"

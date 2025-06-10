@@ -1,0 +1,50 @@
+# LLM API設定
+llm:
+  # 開発時は安価なモデルを使用
+  primary_provider: "google"  # openai/anthropic/google
+  development_mode: true
+  
+  # Google Gemini設定（開発時推奨）
+  google:
+    model: "gemini-2.0-flash-preview-image-generation"
+    temperature: 0.7
+    max_tokens: 2000
+    timeout: 30
+    retry_attempts: 3
+    # 開発時は安価で高速なモデルを使用
+    
+  # OpenAI設定（本番用）
+  openai:
+    model: "gpt-4"
+    temperature: 0.7
+    max_tokens: 2000
+    timeout: 30
+    retry_attempts: 3
+    
+  # Anthropic Claude設定（本番用）
+  anthropic:
+    model: "claude-3-sonnet-20240229"
+    temperature: 0.7
+    max_tokens: 2000
+    timeout: 30
+    
+  # プロンプト設定
+  prompts:
+    theme_generation: |
+      以下の条件で動画テーマを生成してください：
+      - ターゲット: {target_audience}
+      - ジャンル: {preferred_genres}
+      - 除外ジャンル: {excluded_genres}
+      - 動画尺: {duration}分
+      
+    script_generation: |
+      以下のテーマで{speaker_count}人の{tone}な雑談動画スクリプトを生成：
+      テーマ: {theme}
+      動画尺: {duration}分
+      話者: {speakers}
+      
+    title_generation: |
+      以下のスクリプト内容に基づいて、高CTRを狙った魅力的なタイトルを5つ生成してください：
+      テーマ: {theme}
+      内容概要: {script_summary}
+      ターゲット視聴者: {target_audience} 

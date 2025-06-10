@@ -69,7 +69,7 @@ workflows:
           generation_timestamp: "string"
     
     processing:
-      llm_model: "gpt-4"
+      llm_model: "gemini-2.0-flash-preview-image-generation"  # 開発時は安価なモデル
       max_candidates: 10
       retry_count: 3
 
@@ -248,6 +248,10 @@ workflows:
           resolution: "object"
           story_mode: "boolean"
           
+      image_generation_config:
+        type: "yaml"
+        path: "config/image_generation_config.yaml"
+          
     outputs:
       background_images:
         type: "directory"
@@ -406,6 +410,10 @@ workflows:
         type: "json"
         path: "{project_root}/09_illustrations/illustration_config.json"
         
+      image_generation_config:
+        type: "yaml"
+        path: "config/image_generation_config.yaml"
+        
     outputs:
       final_video:
         type: "mp4"
@@ -518,6 +526,10 @@ config_files:
   youtube_config:
     path: "config/youtube_config.yaml"
     description: "YouTube投稿設定"
+    
+  image_generation_config:
+    path: "config/image_generation_config.yaml"
+    description: "画像生成AI設定"
 
 # アセット定義
 assets:

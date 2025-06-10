@@ -1,0 +1,52 @@
+# 開発時専用設定
+development:
+  # 開発モード有効化
+  enabled: true
+  debug_mode: true
+  
+  # 開発時推奨モデル（コスト効率重視）
+  recommended_models:
+    llm: "gemini-2.0-flash-preview-image-generation"
+    image_generation: "gemini-2.0-flash-preview-image-generation"
+    
+  # コスト管理設定
+  cost_management:
+    daily_api_limit: 100  # 1日のAPI呼び出し上限
+    image_generation_limit: 20  # 1日の画像生成上限
+    max_tokens_per_request: 2000
+    
+  # 開発効率化設定
+  optimization:
+    cache_enabled: true
+    mock_mode: false  # モックAPIを使用するか
+    fast_mode: true   # 品質より速度を優先
+    
+  # テスト用設定
+  testing:
+    use_sample_data: true
+    skip_expensive_operations: false
+    reduced_quality_mode: true
+    
+  # ログ設定
+  logging:
+    level: "DEBUG"
+    console_output: true
+    file_output: true
+    api_call_logging: true
+    
+  # 安全制限
+  safety:
+    max_video_length_minutes: 10  # 開発時は短い動画に制限
+    max_file_size_mb: 100
+    auto_cleanup: true  # 開発時は自動クリーンアップ有効
+    
+# 本番切り替え設定
+production:
+  enabled: false
+  models:
+    llm: "gpt-4"
+    image_generation: "dall-e-3"
+  cost_management:
+    daily_api_limit: 1000
+    image_generation_limit: 100
+    max_tokens_per_request: 4000 

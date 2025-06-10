@@ -1,6 +1,118 @@
-# ゆっくり動画 自動生成ツール
+# ゆっくり動画自動生成ツール
 
-AI / LLM / TTS / 画像生成モデルを連携させ、「ゆっくり動画」（霊夢・魔理沙などの立ち絵と合成音声による解説／雑談動画）を企画からYouTube投稿まで自動生成するツールです。
+AI/LLM/TTS/画像生成モデルを連携させ、ゆっくり動画を企画からYouTube投稿まで自動生成するツールです。
+
+## 🎯 プロジェクト概要
+
+このツールは以下の機能を提供します：
+- テーマ選定からスクリプト生成
+- TTS による音声合成
+- 立ち絵アニメーション
+- 背景画像・動画生成
+- 字幕生成・動画合成
+- YouTube 自動投稿
+
+## ⚙️ 開発時設定
+
+### 推奨モデル（開発時）
+開発時は安価で高速なモデルを使用することを推奨します：
+
+**LLM・画像生成共通：**
+- `gemini-2.0-flash-preview-image-generation`
+  - コスト効率が高い
+  - 画像生成とテキスト生成の両方に対応
+  - 開発・テスト用途に最適
+
+### 設定ファイル
+
+開発時は以下の設定が自動的に適用されます：
+
+1. **LLM設定** (`config/llm_config.yaml`)
+   - プライマリプロバイダー: Google
+   - モデル: `gemini-2.0-flash-preview-image-generation`
+
+2. **画像生成設定** (`config/image_generation_config.yaml`)
+   - プライマリプロバイダー: Google
+   - モデル: `gemini-2.0-flash-preview-image-generation`
+   - 開発時制限: 1日20枚まで
+
+3. **開発設定** (`config/development_config.yaml`)
+   - デバッグモード有効
+   - コスト管理機能
+   - キャッシュ機能で効率化
+
+### 本番環境切り替え
+
+本番環境では以下のモデルに切り替え可能：
+- LLM: GPT-4 / Claude-3-Sonnet
+- 画像生成: DALL-E 3 / Stable Diffusion
+
+## 🚀 クイックスタート
+
+1. **環境設定**
+   ```bash
+   pip install -r requirements.txt
+   cp env_template.txt .env
+   ```
+
+2. **API キー設定**
+   `.env` ファイルに以下を追加：
+   ```
+   GOOGLE_API_KEY=your_gemini_api_key
+   ```
+
+3. **開発モード実行**
+   ```bash
+   python src/main.py --dev-mode
+   ```
+
+## 📁 プロジェクト構造
+
+詳細な仕様は `docs/flow_definition.yaml` を参照してください。
+
+```
+src/
+├── core/           # コアロジック
+├── modules/        # 各ステップのモジュール
+├── utils/          # ユーティリティ
+└── config/         # 設定ファイル
+
+config/
+├── llm_config.yaml              # LLM設定
+├── image_generation_config.yaml # 画像生成設定
+├── development_config.yaml     # 開発時設定
+└── voice_config.yaml           # 音声合成設定
+```
+
+## 🛠️ 開発ルール
+
+このプロジェクトでは厳格な開発ルールを適用しています：
+
+1. **必須事前確認**
+   - 全開発作業前に `docs/flow_definition.yaml` を確認
+   - データフローと仕様に厳密に従う
+
+2. **テスト駆動開発**
+   - コード実装前に必ずテストを作成
+   - カバレッジ 80% 以上を目標
+
+3. **コスト管理**
+   - 開発時は安価なモデルを使用
+   - API呼び出し回数の監視
+   - キャッシュ機能の活用
+
+詳細は `.cursorrules` ファイルを参照してください。
+
+## 📚 ドキュメント
+
+- [フロー定義](docs/flow_definition.yaml) - 全体仕様
+- [AIVISSpeech使用方法](docs/aivis_speech_usage.md) - TTS設定
+
+## 🔐 ライセンス・著作権
+
+- 二次創作ガイドライン（東方Project等）を遵守
+- YouTube利用規約を遵守
+- 使用する音楽・画像の著作権を確認してから使用
 
 ## 特徴
 
@@ -23,50 +135,6 @@ AI / LLM / TTS / 画像生成モデルを連携させ、「ゆっくり動画」
 - FFmpeg (動画処理)
 - YouTube Data API
 - 各種AI/LLMサービス
-
-## クイックスタート
-
-### 1. 環境準備
-```bash
-# リポジトリのクローン
-git clone https://github.com/your-username/auto_yukkuri_movie_maker.git
-cd auto_yukkuri_movie_maker
-
-# Python依存関係のインストール
-pip install -r requirements.txt
-
-# 必要なディレクトリの作成
-mkdir -p {temp,projects,assets,config}
-```
-
-### 2. 環境変数の設定
-```bash
-# 環境変数ファイルの作成
-cp env_template.txt .env
-
-# .envファイルを編集して実際のAPIキーを設定
-# 詳細は docs/setup_guide.md を参照
-```
-
-### 3. 必須APIキーの取得
-以下のAPIキーが**必須**です：
-- **OpenAI API** (テーマ・スクリプト生成)
-- **AIVIS Speech API** (音声合成)
-- **画像生成API** (DALL-E/Stable Diffusion等)
-
-詳細な取得方法は [📋 セットアップガイド](docs/setup_guide.md) をご覧ください。
-
-### 4. FFmpegのインストール
-```bash
-# Ubuntu/Debian
-sudo apt install ffmpeg
-
-# macOS
-brew install ffmpeg
-
-# Windows
-# https://ffmpeg.org/download.html からダウンロード
-```
 
 ## インストール
 

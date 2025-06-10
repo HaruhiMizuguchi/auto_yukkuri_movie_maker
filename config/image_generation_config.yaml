@@ -1,0 +1,76 @@
+# 画像生成AI設定
+image_generation:
+  # 開発時は安価なモデルを使用
+  primary_provider: "google"  # google/openai/stability/midjourney
+  development_mode: true
+  
+  # Google Gemini設定（開発時推奨）
+  google:
+    model: "gemini-2.0-flash-preview-image-generation"
+    timeout: 60
+    retry_attempts: 3
+    # 開発時は安価で高速なモデルを使用
+    default_settings:
+      aspect_ratio: "16:9"
+      quality: "standard"  # standard/hd
+      style: "natural"
+      
+  # OpenAI DALL-E設定（本番用）
+  openai:
+    model: "dall-e-3"
+    quality: "hd"
+    size: "1792x1024"
+    style: "natural"  # natural/vivid
+    timeout: 60
+    retry_attempts: 3
+    
+  # Stability AI設定（本番用）
+  stability:
+    model: "stable-diffusion-v1-6"
+    steps: 30
+    cfg_scale: 7.0
+    seed: null  # ランダム
+    samples: 1
+    width: 1920
+    height: 1080
+    
+  # 背景画像生成用プロンプトテンプレート
+  prompts:
+    background_base: |
+      高品質な背景画像、アニメ風、詳細、美しい色彩、{theme}に関連する背景
+      画像サイズ: 1920x1080、横長
+      除外要素: 人物、文字、ロゴ
+      
+    background_specific: |
+      {specific_scene}の背景画像
+      スタイル: {art_style}
+      雰囲気: {mood}
+      色調: {color_tone}
+      時間帯: {time_of_day}
+      
+    illustration_base: |
+      {topic}に関する挿絵イラスト
+      スタイル: アニメ風、カラフル、魅力的
+      構図: {composition}
+      詳細レベル: 高品質、詳細
+      
+  # 画像後処理設定
+  post_processing:
+    resize_enabled: true
+    target_resolution: [1920, 1080]
+    compression_quality: 95
+    format: "png"  # png/jpg
+    optimize: true
+    
+  # 生成枚数制限（開発時のコスト管理）
+  limits:
+    max_background_images: 5  # 開発時は枚数制限
+    max_illustrations: 3
+    daily_generation_limit: 20  # 1日の生成上限
+    
+  # キャッシュ設定（開発効率化）
+  cache:
+    enabled: true
+    cache_duration_hours: 24
+    cache_similar_prompts: true
+    similarity_threshold: 0.8 

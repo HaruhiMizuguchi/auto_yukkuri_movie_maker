@@ -28,11 +28,13 @@ class ProjectManager:
     
     # flow_definition.yamlで定義されたディレクトリ構造
     REQUIRED_SUBDIRECTORIES = [
+        "files/scripts",    # スクリプト関連
         "files/audio",      # 音声ファイル
         "files/video",      # 動画ファイル
         "files/images",     # 画像ファイル
-        "files/scripts",    # スクリプト関連
+        "files/subtitles",  # 字幕ファイル
         "files/metadata",   # メタデータファイル
+        "config",          # 設定ファイル
         "logs",            # ログファイル
         "cache"            # キャッシュファイル
     ]

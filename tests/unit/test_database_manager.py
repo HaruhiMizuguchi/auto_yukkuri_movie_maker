@@ -83,9 +83,8 @@ class TestDatabaseManager:
         # projectsテーブルのスキーマを確認
         projects_schema = db_manager.get_table_schema('projects')
         expected_columns = [
-            'id', 'name', 'description', 'created_at', 'updated_at',
-            'status', 'config_json', 'estimated_duration', 'actual_duration',
-            'theme', 'target_length_minutes', 'youtube_video_id', 'youtube_url'
+            'id', 'theme', 'target_length_minutes', 'status', 
+            'config_json', 'output_summary_json', 'created_at', 'updated_at'
         ]
         
         actual_columns = [col['name'] for col in projects_schema]
@@ -119,8 +118,8 @@ class TestDatabaseManager:
         with db_manager.transaction() as conn:
             # テストデータ挿入（themeフィールドを含む）
             conn.execute(
-                "INSERT INTO projects (id, name, theme, status) VALUES (?, ?, ?, ?)",
-                ("test_001", "Test Project", "test_theme", "planning")
+                "INSERT INTO projects (id, theme, status) VALUES (?, ?, ?)",
+                ("test_001", "test_theme", "created")
             )
             
             # トランザクション内でデータが見えることを確認
@@ -146,8 +145,8 @@ class TestDatabaseManager:
         try:
             with db_manager.transaction() as conn:
                 conn.execute(
-                    "INSERT INTO projects (id, name, theme, status) VALUES (?, ?, ?, ?)",
-                    ("test_002", "Test Project 2", "test_theme", "planning")
+                    "INSERT INTO projects (id, theme, status) VALUES (?, ?, ?)",
+                    ("test_002", "test_theme", "created")
                 )
                 # 意図的に例外を発生させる
                 raise ValueError("Test exception")
@@ -182,8 +181,8 @@ class TestDatabaseManager:
         # テストデータを挿入
         with db_manager.transaction() as conn:
             conn.execute(
-                "INSERT INTO projects (id, name, theme, status) VALUES (?, ?, ?, ?)",
-                ("backup_test", "Backup Test Project", "test_theme", "completed")
+                "INSERT INTO projects (id, theme, status) VALUES (?, ?, ?)",
+                ("backup_test", "test_theme", "completed")
             )
         
         # バックアップ作成
@@ -237,8 +236,8 @@ class TestDatabaseManager:
         # テスト用プロジェクトを作成
         with db_manager.transaction() as conn:
             conn.execute(
-                "INSERT INTO projects (id, name, theme, status) VALUES (?, ?, ?, ?)",
-                ("temp_test", "Temp Test Project", "test_theme", "planning")
+                "INSERT INTO projects (id, theme, status) VALUES (?, ?, ?)",
+                ("temp_test", "test_theme", "created")
             )
         
         # 一時ファイル情報を登録

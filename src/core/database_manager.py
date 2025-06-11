@@ -106,7 +106,7 @@ class DatabaseManager:
                 output_summary_json TEXT DEFAULT '{}',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                CHECK (status IN ('created', 'in_progress', 'completed', 'failed', 'cancelled'))
+                CHECK (status IN ('created', 'in_progress', 'completed', 'failed', 'cancelled', 'interrupted', 'running'))
             )
         """)
         

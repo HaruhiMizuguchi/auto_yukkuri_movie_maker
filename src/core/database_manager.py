@@ -25,6 +25,7 @@ class DatabaseManager:
         self.db_path = Path(db_path)
         self.logger = logging.getLogger(__name__)
         self._connection = None
+        self._in_transaction = False
         
         # Ensure database directory exists
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -71,6 +72,7 @@ class DatabaseManager:
     def transaction(self):
         """Database transaction context manager."""
         with self.get_connection() as conn:
+            self._in_transaction = True
             try:
                 conn.execute("BEGIN")
                 yield conn
@@ -78,6 +80,8 @@ class DatabaseManager:
             except Exception as e:
                 conn.rollback()
                 raise DatabaseError(f"Transaction failed: {str(e)}")
+            finally:
+                self._in_transaction = False
     
     def _create_all_tables(self, conn: sqlite3.Connection):
         """Create all database tables."""
@@ -95,19 +99,14 @@ class DatabaseManager:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS projects (
                 id TEXT PRIMARY KEY,
-                name TEXT NOT NULL UNIQUE,
-                description TEXT,
+                theme TEXT NOT NULL,
+                target_length_minutes REAL DEFAULT 5,
+                status TEXT NOT NULL DEFAULT 'created',
+                config_json TEXT DEFAULT '{}',
+                output_summary_json TEXT DEFAULT '{}',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                status TEXT NOT NULL DEFAULT 'planning',
-                config_json TEXT DEFAULT '{}',
-                estimated_duration REAL DEFAULT 0,
-                actual_duration REAL DEFAULT 0,
-                theme TEXT NOT NULL,
-                target_length_minutes REAL DEFAULT 10,
-                youtube_video_id TEXT,
-                youtube_url TEXT,
-                CHECK (status IN ('planning', 'in_progress', 'completed', 'failed', 'cancelled'))
+                CHECK (status IN ('created', 'in_progress', 'completed', 'failed', 'cancelled'))
             )
         """)
         
@@ -319,6 +318,27 @@ class DatabaseManager:
         
         return health_status
     
+    def execute_query(self, query: str, params: tuple = ()) -> int:
+        """Execute a query and return the number of affected rows."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            # トランザクション外の場合のみコミット
+            if not self._in_transaction:
+                conn.commit()
+            return cursor.rowcount
+    
+    def fetch_one(self, query: str, params: tuple = ()) -> Optional[tuple]:
+        """Fetch one row from a query."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            return cursor.fetchone()
+    
+    def fetch_all(self, query: str, params: tuple = ()) -> List[tuple]:
+        """Fetch all rows from a query."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            return cursor.fetchall()
+    
     def cleanup_temporary_files(self):
         """Clean up temporary files."""
         try:
@@ -346,6 +366,10 @@ class DatabaseManager:
                 
         except Exception as e:
             self.logger.error(f"Temp file cleanup failed: {str(e)}")
+    
+    def close(self):
+        """Explicit close method for cleanup."""
+        self.close_connection()
     
     def __del__(self):
         """Cleanup when DatabaseManager is destroyed."""

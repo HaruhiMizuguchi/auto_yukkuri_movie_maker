@@ -415,6 +415,9 @@ class TestWorkflowEngine(unittest.TestCase):
         self.mock_dependency_resolver = Mock(spec=DependencyResolver)
         self.mock_resource_manager = Mock(spec=ResourceManager)
         
+        # デフォルトのMock戻り値を設定（循環依存なし）
+        self.mock_dependency_resolver.find_circular_dependencies.return_value = []
+        
         # ワークフローエンジンの初期化
         self.engine = WorkflowEngine(
             dependency_resolver=self.mock_dependency_resolver,
@@ -441,6 +444,9 @@ class TestWorkflowEngine(unittest.TestCase):
     
     def test_workflow_registration(self):
         """ワークフロー登録テスト"""
+        # 循環依存なしを明示
+        self.mock_dependency_resolver.find_circular_dependencies.return_value = []
+        
         workflow_name = "yukkuri_video_generation"
         
         self.engine.register_workflow(workflow_name, self.step_definitions)
@@ -458,7 +464,8 @@ class TestWorkflowEngine(unittest.TestCase):
     
     def test_workflow_execution_planning(self):
         """ワークフロー実行計画テスト"""
-        # 依存関係解決の設定
+        # 依存関係解決の設定（循環依存なしを明示）
+        self.mock_dependency_resolver.find_circular_dependencies.return_value = []
         self.mock_dependency_resolver.resolve_execution_order.return_value = [
             ["theme_selection"],  # フェーズ1
             ["script_generation", "title_generation"],  # フェーズ2（並列）
@@ -493,6 +500,14 @@ class TestWorkflowEngine(unittest.TestCase):
     
     def test_resource_availability_check(self):
         """リソース可用性チェックテスト"""
+        # 循環依存なしを明示
+        self.mock_dependency_resolver.find_circular_dependencies.return_value = []
+        # 実行順序の設定
+        self.mock_dependency_resolver.resolve_execution_order.return_value = [
+            ["theme_selection"],
+            ["script_generation", "title_generation"],
+            ["tts_generation"]
+        ]
         # リソース制限の設定
         self.mock_resource_manager.is_resource_available.return_value = True
         self.mock_resource_manager.acquire_resources.return_value = True

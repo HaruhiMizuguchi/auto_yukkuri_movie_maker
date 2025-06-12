@@ -306,130 +306,126 @@ class TestConfigManager(unittest.TestCase):
 
     def test_config_inheritance(self):
         """設定継承のテスト"""
-        self.skipTest("ConfigManager implementation pending")
-        
         # 基本設定とプロファイル設定の継承
-        # base_config = self.config_manager.load_config("app_config.yaml")
-        # profile_config = self.config_manager.load_config("development.yaml")
+        base_config = self.config_manager.load_config("app_config.yaml")
+        profile_config = self.config_manager.load_config("development.yaml")
         
-        # merged_config = self.config_manager.merge_configs(base_config, profile_config)
+        merged_config = self.config_manager.merge_configs(base_config, profile_config)
         
         # 継承が正しく行われている
-        # self.assertEqual(merged_config["app"]["name"], "test_app")  # 基本設定
-        # self.assertEqual(merged_config["app"]["debug"], True)       # プロファイル設定で上書き
+        self.assertEqual(merged_config["app"]["name"], "test_app")  # 基本設定
+        self.assertEqual(merged_config["app"]["debug"], True)       # プロファイル設定で上書き
 
     def test_config_caching(self):
         """設定キャッシュ機能のテスト"""
-        self.skipTest("ConfigManager implementation pending")
-        
         # 初回読み込み
-        # config1 = self.config_manager.load_config("app_config.yaml", use_cache=True)
+        config1 = self.config_manager.load_config("app_config.yaml", use_cache=True)
         
         # キャッシュから読み込み（ファイルが変更されていない場合）
-        # config2 = self.config_manager.load_config("app_config.yaml", use_cache=True)
+        config2 = self.config_manager.load_config("app_config.yaml", use_cache=True)
         
-        # 同じオブジェクトが返されることを確認
-        # self.assertIs(config1, config2)
+        # 同じ内容が返されることを確認（deepcopyされているので、オブジェクトは異なる）
+        self.assertEqual(config1, config2)
+        
+        # キャッシュ情報の確認
+        cache_info = self.config_manager.get_cache_info()
+        self.assertIn("app_config.yaml", cache_info["cached_files"])
 
     def test_hot_reload_functionality(self):
         """ホットリロード機能のテスト"""
-        self.skipTest("ConfigManager implementation pending")
-        
-        # config = self.config_manager.load_config("app_config.yaml")
-        # original_name = config["app"]["name"]
+        config = self.config_manager.load_config("app_config.yaml")
+        original_name = config["app"]["name"]
         
         # 設定ファイルを変更
-        # modified_config = {
-        #     "app": {
-        #         "name": "modified_app",
-        #         "version": "2.0.0"
-        #     }
-        # }
+        modified_config = {
+            "app": {
+                "name": "modified_app",
+                "version": "2.0.0"
+            },
+            "database": {
+                "host": "localhost",
+                "name": "test_db"
+            }
+        }
         
-        # config_file_path = os.path.join(self.config_dir, "app_config.yaml")
-        # with open(config_file_path, 'w') as f:
-        #     yaml.dump(modified_config, f)
+        config_file_path = os.path.join(self.config_dir, "app_config.yaml")
+        with open(config_file_path, 'w') as f:
+            yaml.dump(modified_config, f)
         
         # ホットリロード実行
-        # reloaded_config = self.config_manager.reload_config("app_config.yaml")
+        reloaded_config = self.config_manager.reload_config("app_config.yaml")
         
         # 変更が反映されている
-        # self.assertNotEqual(reloaded_config["app"]["name"], original_name)
-        # self.assertEqual(reloaded_config["app"]["name"], "modified_app")
+        self.assertNotEqual(reloaded_config["app"]["name"], original_name)
+        self.assertEqual(reloaded_config["app"]["name"], "modified_app")
 
     def test_error_handling_file_not_found(self):
         """ファイルが存在しない場合のエラーハンドリング"""
-        self.skipTest("ConfigManager implementation pending")
+        with self.assertRaises(ConfigError) as context:
+            self.config_manager.load_config("nonexistent_config.yaml")
         
-        # with self.assertRaises(ConfigError) as context:
-        #     self.config_manager.load_config("nonexistent_config.yaml")
-        
-        # self.assertIn("not found", str(context.exception))
+        self.assertIn("not found", str(context.exception))
 
     def test_error_handling_invalid_yaml(self):
         """不正なYAMLファイルのエラーハンドリング"""
-        self.skipTest("ConfigManager implementation pending")
-        
         # 不正なYAMLファイルを作成
-        # invalid_yaml_file = os.path.join(self.config_dir, "invalid.yaml")
-        # with open(invalid_yaml_file, 'w') as f:
-        #     f.write("invalid: yaml: content: [")
+        invalid_yaml_file = os.path.join(self.config_dir, "invalid.yaml")
+        with open(invalid_yaml_file, 'w') as f:
+            f.write("invalid: yaml: content: [")
         
-        # with self.assertRaises(ConfigError) as context:
-        #     self.config_manager.load_config("invalid.yaml")
+        with self.assertRaises(ConfigError) as context:
+            self.config_manager.load_config("invalid.yaml")
         
-        # self.assertIn("parsing", str(context.exception).lower())
+        self.assertIn("parsing", str(context.exception).lower())
 
     def test_error_handling_invalid_json(self):
         """不正なJSONファイルのエラーハンドリング"""
-        self.skipTest("ConfigManager implementation pending")
-        
         # 不正なJSONファイルを作成
-        # invalid_json_file = os.path.join(self.config_dir, "invalid.json")
-        # with open(invalid_json_file, 'w') as f:
-        #     f.write('{"invalid": json, "content"}')
+        invalid_json_file = os.path.join(self.config_dir, "invalid.json")
+        with open(invalid_json_file, 'w') as f:
+            f.write('{"invalid": json, "content"}')
         
-        # with self.assertRaises(ConfigError) as context:
-        #     self.config_manager.load_config("invalid.json")
+        with self.assertRaises(ConfigError) as context:
+            self.config_manager.load_config("invalid.json")
         
-        # self.assertIn("json", str(context.exception).lower())
+        self.assertIn("json", str(context.exception).lower())
 
     def test_get_config_value_by_path(self):
         """設定値をパスで取得するテスト"""
-        self.skipTest("ConfigManager implementation pending")
-        
-        # config = self.config_manager.load_config("app_config.yaml")
+        config = self.config_manager.load_config("app_config.yaml")
         
         # パス指定での値取得
-        # app_name = self.config_manager.get_value("app.name", config)
-        # db_host = self.config_manager.get_value("database.host", config)
+        app_name = self.config_manager.get_value("app.name", config)
+        db_host = self.config_manager.get_value("database.host", config)
         
-        # self.assertEqual(app_name, "test_app")
-        # self.assertEqual(db_host, "localhost")  # デフォルト値
+        self.assertEqual(app_name, "test_app")
+        self.assertEqual(db_host, "localhost")  # デフォルト値
+        
+        # 存在しないパスの場合はNoneが返される
+        non_existent = self.config_manager.get_value("app.nonexistent", config)
+        self.assertIsNone(non_existent)
 
     def test_config_interpolation(self):
         """設定値内部参照のテスト"""
-        self.skipTest("ConfigManager implementation pending")
-        
         # 設定値内で他の設定値を参照
-        # interpolation_config = {
-        #     "base": {
-        #         "url": "http://localhost",
-        #         "port": 8080
-        #     },
-        #     "api": {
-        #         "endpoint": "${base.url}:${base.port}/api"
-        #     }
-        # }
+        interpolation_config = {
+            "base": {
+                "url": "http://localhost",
+                "port": 8080
+            },
+            "api": {
+                "endpoint": "${base.url}:${base.port}/api"
+            }
+        }
         
-        # config_file = os.path.join(self.config_dir, "interpolation.yaml")
-        # with open(config_file, 'w') as f:
-        #     yaml.dump(interpolation_config, f)
+        config_file = os.path.join(self.config_dir, "interpolation.yaml")
+        with open(config_file, 'w') as f:
+            yaml.dump(interpolation_config, f)
         
-        # config = self.config_manager.load_config("interpolation.yaml")
+        config = self.config_manager.load_config("interpolation.yaml")
         
         # 内部参照が展開されている
-        # self.assertEqual(config["api"]["endpoint"], "http://localhost:8080/api")
+        self.assertEqual(config["api"]["endpoint"], "http://localhost:8080/api")
 
 
 if __name__ == "__main__":

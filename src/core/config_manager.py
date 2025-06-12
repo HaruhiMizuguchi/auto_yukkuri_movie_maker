@@ -111,6 +111,9 @@ class ConfigManager:
             # デフォルト値適用
             config = self._apply_defaults(config)
             
+            # 設定値内部参照展開
+            config = self._expand_config_interpolation(config, config)
+            
             # キャッシュに保存
             if use_cache:
                 self.cache[filename] = copy.deepcopy(config)
@@ -167,6 +170,56 @@ class ConfigManager:
         else:
             return data
 
+    def _expand_config_interpolation(self, data: Any, config: Dict[str, Any]) -> Any:
+        """
+        設定値内部参照展開を再帰的に実行
+        
+        Args:
+            data: 展開対象のデータ
+            config: 参照元の設定データ
+            
+        Returns:
+            Any: 内部参照が展開されたデータ
+        """
+        if isinstance(data, dict):
+            return {key: self._expand_config_interpolation(value, config) 
+                   for key, value in data.items()}
+        elif isinstance(data, list):
+            return [self._expand_config_interpolation(item, config) for item in data]
+        elif isinstance(data, str):
+            return self._expand_config_string(data, config)
+        else:
+            return data
+
+    def _expand_config_string(self, text: str, config: Dict[str, Any]) -> str:
+        """
+        文字列内の設定値参照を展開
+        
+        Args:
+            text: 展開対象の文字列
+            config: 参照元の設定データ
+            
+        Returns:
+            str: 展開された文字列
+        """
+        # 環境変数参照パターン（${VAR_NAME} or ${VAR_NAME:default}）
+        env_pattern = re.compile(r'\$\{([^}:]+)(?::([^}]*))?\}')
+        
+        def replace_config_var(match):
+            var_name = match.group(1)
+            default_value = match.group(2) if match.group(2) is not None else ""
+            
+            # 設定値から取得を試行
+            config_value = self.get_value(var_name, config)
+            if config_value is not None:
+                return str(config_value)
+            
+            # 環境変数から取得を試行
+            env_value = os.environ.get(var_name, default_value)
+            return env_value
+        
+        return env_pattern.sub(replace_config_var, text)
+
     def _expand_env_string(self, text: str) -> Any:
         """
         文字列内の環境変数を展開
@@ -180,6 +233,10 @@ class ConfigManager:
         def replace_env_var(match):
             var_name = match.group(1)
             default_value = match.group(2) if match.group(2) is not None else ""
+            
+            # 設定値参照（ドット記法）の場合は環境変数展開をスキップ
+            if '.' in var_name:
+                return match.group(0)  # 元のパターンをそのまま返す
             
             env_value = os.environ.get(var_name, default_value)
             return env_value

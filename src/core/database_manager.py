@@ -375,3 +375,4 @@ class DatabaseManager:
         """Cleanup when DatabaseManager is destroyed."""
         if hasattr(self, '_connection') and self._connection:
             self._connection.close()
+ 

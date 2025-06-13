@@ -17,6 +17,9 @@ OPENAI_ORGANIZATION=your_openai_org_id_here
 # Anthropic Claude API (代替LLM、オプション)
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
 
+# Google Gemini API (代替LLM、オプション)
+GEMINI_API_KEY=your_gemini_api_key_here
+
 # ===========================================
 # 【必須】TTS (音声合成) API 設定
 # ===========================================

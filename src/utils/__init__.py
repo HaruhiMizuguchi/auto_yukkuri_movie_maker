@@ -53,6 +53,17 @@ from .theme_utils import (
     safe_select_theme
 )
 
+# 画像生成関連
+from .image_generation import (
+    generate_image,
+    edit_image,
+    generate_yukkuri_thumbnails,
+    batch_generate_images,
+    test_image_generation,
+    get_supported_formats,
+    safe_generate_image
+)
+
 __all__ = [
     # テキスト生成
     "generate_text",
@@ -93,5 +104,14 @@ __all__ = [
     "get_popular_themes",
     "save_theme_to_file",
     "load_theme_from_file",
-    "safe_select_theme"
+    "safe_select_theme",
+    
+    # 画像生成
+    "generate_image",
+    "edit_image",
+    "generate_yukkuri_thumbnails",
+    "batch_generate_images",
+    "test_image_generation",
+    "get_supported_formats",
+    "safe_generate_image"
 ] 

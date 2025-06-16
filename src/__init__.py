@@ -100,11 +100,11 @@ from .api import (
     ImageFormat,
     
     # YouTube API
-    YouTubeAPIClient,
-    UploadRequest,
-    UploadResponse,
+    YouTubeClient,
+    VideoUploadRequest,
+    VideoUploadResponse,
     VideoMetadata,
-    PrivacyStatus
+    VideoPrivacy
 )
 
 # 🛠️ ユーティリティのインポート
@@ -170,7 +170,7 @@ def list_available_functions() -> list:
         "ThemeSelector", "UserPreferences", "ThemeSelectionInput",
         
         # API クライアント
-        "GeminiLLMClient", "AivisSpeechClient", "ImageGenerationClient", "YouTubeAPIClient",
+        "GeminiLLMClient", "AivisSpeechClient", "ImageGenerationClient", "YouTubeClient",
         
         # ユーティリティ
         "generate_text", "generate_yukkuri_script", "generate_video_title"
@@ -230,7 +230,7 @@ __all__ = [
     "AivisSpeechClient", "TTSRequest", "TTSResponse", "AudioSettings", 
     "SpeakerStyle", "TimestampData",
     "ImageGenerationClient", "ImageRequest", "ImageResponse", "ImageStyle", "ImageFormat",
-    "YouTubeAPIClient", "UploadRequest", "UploadResponse", "VideoMetadata", "PrivacyStatus",
+    "YouTubeClient", "VideoUploadRequest", "VideoUploadResponse", "VideoMetadata", "VideoPrivacy",
     
     # ユーティリティ
     "generate_text", "generate_yukkuri_script", "generate_video_title",

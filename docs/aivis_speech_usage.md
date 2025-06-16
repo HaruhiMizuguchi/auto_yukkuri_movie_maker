@@ -36,7 +36,7 @@ def generate_voice(text, output_file="voice.wav"):
         res.raise_for_status()
         speakers = res.json()
         
-        # 最初のスタイルIDを使用
+        # 最初のスタイルIDを使用（例: 888753760）
         style_id = speakers[0]["styles"][0]["id"]
         
         # 2. audio_query でクエリパラメータを取得
@@ -74,6 +74,21 @@ if __name__ == "__main__":
         print("音声生成完了: voice.wav")
     else:
         print("音声生成失敗")
+
+# 高レベルユーティリティ関数の使用例
+# より簡単に音声生成を行う場合は、以下のように使用できます：
+"""
+import asyncio
+from src.utils.audio_generation import generate_speech
+
+async def simple_example():
+    # 最もシンプルな使用例
+    audio_file = await generate_speech("こんにちは！")
+    print(f"音声ファイル: {audio_file}")
+
+# 実行
+asyncio.run(simple_example())
+"""
 ```
 
 ## 重要なポイント

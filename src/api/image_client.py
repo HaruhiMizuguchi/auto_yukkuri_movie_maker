@@ -38,6 +38,15 @@ class ImageFormat(Enum):
     WEBP = "webp"
 
 
+class ImageStyle(Enum):
+    """画像スタイル"""
+    REALISTIC = "realistic"
+    ANIME = "anime"
+    CARTOON = "cartoon"
+    ARTISTIC = "artistic"
+    PHOTOGRAPHIC = "photographic"
+
+
 class ResponseModality(Enum):
     """レスポンスモダリティ"""
     TEXT = "TEXT"

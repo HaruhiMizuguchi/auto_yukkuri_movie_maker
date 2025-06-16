@@ -24,15 +24,22 @@ logger = logging.getLogger(__name__)
 
 # デフォルト設定
 DEFAULT_SPEAKERS = {
-    "reimu": 0,      # 霊夢（デフォルト）
-    "marisa": 1,     # 魔理沙
-    "yukari": 2,     # 紫
-    "alice": 3,      # アリス
-    "patchouli": 4   # パチュリー
+    "anneli_normal": 888753760,      # Anneli ノーマル（デフォルト）
+    "anneli_standard": 888753761,    # Anneli 通常
+    "anneli_high": 888753762,        # Anneli テンション高め
+    "anneli_calm": 888753763,        # Anneli 落ち着き
+    "anneli_happy": 888753764,       # Anneli 上機嫌
+    "anneli_sad": 888753765,         # Anneli 怒り・悲しみ
+    # 互換性のためのエイリアス
+    "reimu": 888753760,              # 霊夢（Anneli ノーマル）
+    "marisa": 888753762,             # 魔理沙（Anneli テンション高め）
+    "yukari": 888753763,             # 紫（Anneli 落ち着き）
+    "alice": 888753761,              # アリス（Anneli 通常）
+    "patchouli": 888753765           # パチュリー（Anneli 怒り・悲しみ）
 }
 
 DEFAULT_SETTINGS = AudioSettings(
-    speaker_id=0,
+    speaker_id=888753760,  # Anneli ノーマル
     speed=1.0,
     pitch=0.0,
     intonation=1.0,
@@ -388,9 +395,9 @@ def _resolve_speaker_id(speaker: Union[str, int]) -> int:
         if speaker_lower in DEFAULT_SPEAKERS:
             return DEFAULT_SPEAKERS[speaker_lower]
     
-    # デフォルトは霊夢
-    logger.warning(f"不明な話者: {speaker}, デフォルト(reimu)を使用")
-    return DEFAULT_SPEAKERS["reimu"]
+    # デフォルトはAnneli ノーマル
+    logger.warning(f"不明な話者: {speaker}, デフォルト(anneli_normal)を使用")
+    return DEFAULT_SPEAKERS["anneli_normal"]
 
 
 # エラーハンドリング付きの安全な音声生成

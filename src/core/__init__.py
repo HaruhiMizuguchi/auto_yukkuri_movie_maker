@@ -37,6 +37,9 @@ from .data_integration_manager import DataIntegrationManager
 # プロジェクト状態管理
 from .project_state_manager import ProjectStateManager
 
+# DAO（データアクセスオブジェクト）
+from ..dao import ThemeSelectionDAO
+
 __all__ = [
     # プロジェクト管理
     "ProjectManager",
@@ -58,5 +61,8 @@ __all__ = [
     "DataIntegrationManager",
     
     # 監視
-    "ProgressMonitor"
+    "ProgressMonitor",
+    
+    # DAO
+    "ThemeSelectionDAO"
 ] 

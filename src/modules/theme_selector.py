@@ -134,20 +134,20 @@ class LLMInterface(ABC):
 
 
 class DatabaseDataAccess(DataAccessInterface):
-    """データベースデータアクセス実装"""
+    """データベースデータアクセス実装（DAO使用）"""
     
     def __init__(self, repository: ProjectRepository, config_manager: ConfigManager):
         self.repository = repository
         self.config_manager = config_manager
+        # DAOを初期化
+        from ..dao.theme_selection_dao import ThemeSelectionDAO
+        self.dao = ThemeSelectionDAO(repository.db_manager)
     
     def get_user_preferences(self, project_id: str) -> UserPreferences:
         """プロジェクトからユーザー設定を取得"""
-        project = self.repository.get_project(project_id)
-        if not project:
-            raise ValueError(f"Project not found: {project_id}")
-        
-        # configからユーザー設定を取得
-        user_prefs = project.get("config", {}).get("user_preferences", {})
+        # DAOを使用して設定を取得
+        config = self.dao.get_project_config(project_id)
+        user_prefs = config.get("user_preferences", {})
         
         return UserPreferences(
             genre_history=user_prefs.get("genre_history", []),
@@ -163,18 +163,25 @@ class DatabaseDataAccess(DataAccessInterface):
         output: ThemeSelectionOutput
     ) -> None:
         """テーマ選定結果をデータベースに保存"""
-        # プロジェクトテーブルを更新
-        self.repository.update_project(
+        # DAOを使用してプロジェクトテーマを更新
+        self.dao.update_project_theme(
             project_id=project_id,
             theme=output.selected_theme.theme,
             target_length_minutes=output.selected_theme.target_length_minutes
         )
         
-        # ワークフローステップ結果を保存
-        self.repository.save_step_result(
+        # DAOを使用してワークフローステップ結果を保存
+        # datetimeオブジェクトをISO文字列に変換
+        output_dict = asdict(output)
+        if 'selected_theme' in output_dict and 'generation_timestamp' in output_dict['selected_theme']:
+            timestamp = output_dict['selected_theme']['generation_timestamp']
+            if isinstance(timestamp, datetime):
+                output_dict['selected_theme']['generation_timestamp'] = timestamp.isoformat()
+        
+        self.dao.save_workflow_step_result(
             project_id=project_id,
             step_name="theme_selection",
-            output_data=asdict(output),
+            output_data=output_dict,
             status="completed"
         )
         
@@ -201,14 +208,16 @@ class DatabaseDataAccess(DataAccessInterface):
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(candidates_data, f, ensure_ascii=False, indent=2)
         
-        # ファイル参照をデータベースに登録
-        self.repository.register_file_reference(
+        # DAOを使用してファイル参照を登録
+        file_size = file_path.stat().st_size if file_path.exists() else 0
+        self.dao.register_file_reference(
             project_id=project_id,
             file_type="metadata",
             file_category="output",
-            file_path=str(file_path.relative_to("projects" / project_id)),
+            file_path=str(file_path),
             file_name="theme_candidates.json",
-            metadata={"description": "テーマ候補一覧", "step_name": "theme_selection"}
+            file_size=file_size,
+            metadata={"generation_time": datetime.now().isoformat()}
         )
         
         logger.info(f"テーマ候補ファイルを保存: {file_path}")
@@ -230,11 +239,18 @@ class GeminiThemeLLM(LLMInterface):
         prompt = self._build_theme_generation_prompt(preferences, count)
         
         try:
-            response = self.llm_client.generate_text(
+            from ..api.llm_client import GeminiRequest, ModelType
+            
+            gemini_request = GeminiRequest(
                 prompt=prompt,
-                max_tokens=2000,
+                model=ModelType.GEMINI_2_0_FLASH_EXP,
+                max_output_tokens=2000,
                 temperature=0.8
             )
+            
+            # asyncメソッドなので同期的に呼び出し
+            import asyncio
+            response = asyncio.run(self.llm_client.generate_text(gemini_request))
             
             return self._parse_theme_candidates(response.text)
             
@@ -252,11 +268,18 @@ class GeminiThemeLLM(LLMInterface):
         prompt = self._build_evaluation_prompt(candidates, preferences)
         
         try:
-            response = self.llm_client.generate_text(
+            from ..api.llm_client import GeminiRequest, ModelType
+            
+            gemini_request = GeminiRequest(
                 prompt=prompt,
-                max_tokens=1500,
+                model=ModelType.GEMINI_2_0_FLASH_EXP,
+                max_output_tokens=1500,
                 temperature=0.3  # 評価は一貫性重視
             )
+            
+            # asyncメソッドなので同期的に呼び出し
+            import asyncio
+            response = asyncio.run(self.llm_client.generate_text(gemini_request))
             
             return self._parse_ranked_themes(response.text, candidates)
             

@@ -3,7 +3,7 @@
  
 プロジェクト管理、データベース管理、ワークフローエンジンなどの
 基盤機能を提供するモジュール
-"""
+""" 
 
 # プロジェクト管理
 from .project_manager import ProjectManager

@@ -6,8 +6,10 @@ Data Access Object (DAO) パッケージ
 
 from .theme_selection_dao import ThemeSelectionDAO
 from .script_generation_dao import ScriptGenerationDAO
+from .title_generation_dao import TitleGenerationDAO
 
 __all__ = [
     "ThemeSelectionDAO",
-    "ScriptGenerationDAO"
+    "ScriptGenerationDAO",
+    "TitleGenerationDAO"
 ] 

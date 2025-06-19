@@ -5,7 +5,9 @@ Data Access Object (DAO) パッケージ
 """
 
 from .theme_selection_dao import ThemeSelectionDAO
+from .script_generation_dao import ScriptGenerationDAO
 
 __all__ = [
-    "ThemeSelectionDAO"
+    "ThemeSelectionDAO",
+    "ScriptGenerationDAO"
 ] 

@@ -57,26 +57,29 @@ class TestCharacterSynthesisRealVideo(unittest.TestCase):
 
     def setUp(self):
         """テスト前準備"""
-        # 一時ディレクトリ作成
-        self.test_dir = tempfile.mkdtemp(prefix="test_real_video_")
+        # 出力ディレクトリを使用（一時ディレクトリの代わりに）
+        self.test_dir = os.path.join(os.getcwd(), "outputs")
+        os.makedirs(self.test_dir, exist_ok=True)
+        
         self.project_id = f"test-real-video-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-        
-        # データベース設定
-        self.db_path = os.path.join(self.test_dir, "test_database.db")
+
+        # データベース設定（一時ディレクトリ内）
+        temp_dir = tempfile.mkdtemp(prefix="test_db_")
+        self.db_path = os.path.join(temp_dir, "test_database.db")
         self.db_manager = DatabaseManager(self.db_path)
-        
+
         # データベース初期化
         self.db_manager.initialize()
-        
+
         # DAO作成
         self.dao = CharacterSynthesisDAO(self.db_manager)
-        
-        # ファイルマネージャー作成
-        self.file_manager = FileSystemManager(self.test_dir)
-        
+
+        # ファイルマネージャー作成（一時ディレクトリ用）
+        self.file_manager = FileSystemManager(temp_dir)
+
         # 設定マネージャー作成
         self.config_manager = ConfigManager()
-        
+
         # CharacterSynthesizer作成
         self.synthesizer = CharacterSynthesizer(
             dao=self.dao,
@@ -84,18 +87,20 @@ class TestCharacterSynthesisRealVideo(unittest.TestCase):
             config_manager=self.config_manager,
             logger=self.logger
         )
-        
+
         # テストプロジェクト設定
         self._setup_test_project()
 
     def tearDown(self):
         """テスト後クリーンアップ"""
+        # 注意: 動画ファイルは outputs ディレクトリに保存されるため削除しない
+        print(f"📁 生成された動画ファイルは outputs ディレクトリに保存されています: {self.test_dir}")
+        
         try:
-            # 一時ディレクトリ削除
-            if os.path.exists(self.test_dir):
-                shutil.rmtree(self.test_dir)
+            if hasattr(self, 'db_manager'):
+                self.db_manager.close()
         except Exception as e:
-            self.logger.warning(f"テストクリーンアップエラー: {e}")
+            self.logger.warning(f"データベースクローズエラー: {e}")
 
     def _setup_test_project(self):
         """テストプロジェクト設定"""

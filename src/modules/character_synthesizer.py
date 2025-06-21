@@ -9,6 +9,7 @@ AIVIS Speech APIのタイムスタンプデータとGemini APIの感情分析を
 import os
 import asyncio
 import tempfile
+import subprocess
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
@@ -22,16 +23,19 @@ from src.core.file_system_manager import FileSystemManager
 from src.core.config_manager import ConfigManager
 from src.api.llm_client import GeminiLLMClient
 
-# 動画処理ライブラリ（将来的にOpenCVやmovipyを使用）
+# 動画処理ライブラリ
 try:
     import cv2
     import numpy as np
+    import ffmpeg
+    from PIL import Image, ImageDraw, ImageFont
     VIDEO_PROCESSING_AVAILABLE = True
 except ImportError:
     VIDEO_PROCESSING_AVAILABLE = False
     cv2 = None
     np = None
-    logging.warning("OpenCV not available. Video generation will use mock implementation.")
+    ffmpeg = None
+    logging.warning("Video processing libraries not available. Video generation will use mock implementation.")
 
 
 @dataclass
@@ -508,34 +512,40 @@ class CharacterSynthesizer:
         video_config: Dict[str, Any]
     ) -> None:
         """
-        OpenCVを使用した高度な動画生成（透明背景・品質最適化対応）
+        高度動画生成（実際のファイル出力対応）
         
         Args:
             character_frames: キャラクターフレーム
             output_path: 出力パス
             video_config: 動画設定
         """
-        output_settings = video_config["output_settings"]
-        quality_settings = video_config["quality_optimization"]
-        
-        width = output_settings["video_width"]
-        height = output_settings["video_height"]
-        fps = output_settings["frame_rate"]
-        transparency = output_settings["transparency"]
-        
-        # 透明背景対応のコーデック設定
-        if transparency:
-            # 透明背景の場合はpng形式の連番画像を生成してからffmpegで変換
-            await self._generate_transparent_video_sequence(
-                character_frames, output_path, width, height, fps, video_config
-            )
-        else:
-            # 通常の動画生成
-            await self._generate_standard_video(
-                character_frames, output_path, width, height, fps, video_config
-            )
-        
-        self.logger.info(f"高度動画生成完了: {output_path}, frames={len(character_frames)}, transparency={transparency}")
+        try:
+            # 出力ディレクトリ作成
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            
+            # 透明背景の場合
+            if video_config.get("transparency", False):
+                await self._generate_transparent_video_sequence(
+                    character_frames, output_path,
+                    video_config.get("width", 1920),
+                    video_config.get("height", 1080),
+                    video_config.get("frame_rate", 30),
+                    video_config
+                )
+            else:
+                await self._generate_standard_video(
+                    character_frames, output_path,
+                    video_config.get("width", 1920),
+                    video_config.get("height", 1080),
+                    video_config.get("frame_rate", 30),
+                    video_config
+                )
+                
+            self.logger.info(f"動画生成完了: {output_path}")
+            
+        except Exception as e:
+            self.logger.error(f"動画生成エラー: {e}")
+            raise CharacterSynthesizerError(f"動画生成失敗: {e}")
 
     async def _generate_transparent_video_sequence(
         self,
@@ -547,7 +557,7 @@ class CharacterSynthesizer:
         video_config: Dict[str, Any]
     ) -> None:
         """
-        透明背景動画シーケンス生成
+        透明背景動画シーケンス生成（実際のファイル出力）
         
         Args:
             character_frames: キャラクターフレーム
@@ -557,25 +567,23 @@ class CharacterSynthesizer:
             fps: フレームレート
             video_config: 動画設定
         """
-        # 一時ディレクトリで連番画像を生成
-        temp_dir = tempfile.mkdtemp()
-        
-        try:
-            # PNG連番画像を生成
-            for i, frame in enumerate(character_frames):
-                img = self._create_transparent_frame_image(frame, width, height, video_config)
-                frame_path = os.path.join(temp_dir, f"frame_{i:06d}.png")
-                cv2.imwrite(frame_path, img)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self.logger.info(f"透明背景動画生成開始: frames={len(character_frames)}, size={width}x{height}")
             
-            # ffmpegで透明背景動画に変換（仮想実装 - 実際はsubprocessでffmpeg呼び出し）
+            # PNG連番画像を生成
+            frame_paths = []
+            for i, frame in enumerate(character_frames):
+                frame_img = self._create_transparent_frame_image(frame, width, height, video_config)
+                frame_path = os.path.join(temp_dir, f"frame_{i:06d}.png")
+                
+                # RGBA画像をPNGで保存
+                cv2.imwrite(frame_path, frame_img)
+                frame_paths.append(frame_path)
+            
+            # ffmpegで透明背景動画に変換
             await self._convert_png_sequence_to_transparent_video(
                 temp_dir, output_path, fps, video_config
             )
-            
-        finally:
-            # 一時ファイルをクリーンアップ
-            import shutil
-            shutil.rmtree(temp_dir, ignore_errors=True)
 
     async def _generate_standard_video(
         self,
@@ -587,7 +595,7 @@ class CharacterSynthesizer:
         video_config: Dict[str, Any]
     ) -> None:
         """
-        標準動画生成
+        標準動画生成（実際のファイル出力）
         
         Args:
             character_frames: キャラクターフレーム
@@ -597,20 +605,29 @@ class CharacterSynthesizer:
             fps: フレームレート
             video_config: 動画設定
         """
-        quality_settings = video_config["quality_optimization"]
+        if not VIDEO_PROCESSING_AVAILABLE:
+            self.logger.warning("OpenCV not available. Using mock implementation.")
+            with open(output_path, 'w') as f:
+                f.write(f"Mock standard video with {len(character_frames)} frames")
+            return
         
-        # 品質最適化されたコーデック設定
+        # OpenCVのVideoWriterを使用
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
         
         try:
-            for frame in character_frames:
-                # フレーム画像を生成（品質最適化適用）
-                img = self._create_optimized_frame_image(frame, width, height, video_config)
-                out.write(img)
+            self.logger.info(f"標準動画生成開始: frames={len(character_frames)}, size={width}x{height}")
             
+            for frame in character_frames:
+                frame_img = self._create_optimized_frame_image(frame, width, height, video_config)
+                # BGRに変換（OpenCVはBGR形式）
+                frame_bgr = cv2.cvtColor(frame_img, cv2.COLOR_RGBA2BGR)
+                out.write(frame_bgr)
+                
         finally:
             out.release()
+            
+        self.logger.info(f"標準動画生成完了: {output_path}")
 
     def _create_transparent_frame_image(
         self,
@@ -620,7 +637,7 @@ class CharacterSynthesizer:
         video_config: Dict[str, Any]
     ) -> 'np.ndarray':
         """
-        透明背景フレーム画像を作成
+        透明背景フレーム画像作成（実際のRGBA画像生成）
         
         Args:
             frame: キャラクターフレーム
@@ -629,30 +646,67 @@ class CharacterSynthesizer:
             video_config: 動画設定
             
         Returns:
-            透明背景画像（RGBA形式）
+            RGBA画像（numpy配列）
         """
-        # RGBA形式で透明背景画像を作成
+        if not VIDEO_PROCESSING_AVAILABLE:
+            # モック実装
+            return np.zeros((height, width, 4), dtype=np.uint8)
+        
+        # RGBA画像を作成（透明背景）
         img = np.zeros((height, width, 4), dtype=np.uint8)
         
-        # アルファチャンネルを初期化（完全透明）
-        img[:, :, 3] = 0
+        # キャラクター位置とスケール
+        char_x, char_y = frame.position
+        scale = frame.scale
         
-        # キャラクター描画（簡易実装）
-        color = (100, 150, 200) if frame.speaker == "reimu" else (200, 150, 100)
+        # キャラクターサイズ
+        char_width = int(400 * scale)
+        char_height = int(600 * scale)
         
-        # キャラクター円を描画（アルファ値付き）
-        cv2.circle(img, frame.position, 50, (*color, 255), -1)
+        # 描画領域計算
+        start_x = max(0, char_x - char_width // 2)
+        end_x = min(width, char_x + char_width // 2)
+        start_y = max(0, char_y - char_height // 2)
+        end_y = min(height, char_y + char_height // 2)
         
-        # 口形状を表す図形（アルファ値付き）
-        mouth_offset = self._get_mouth_offset(frame.mouth_shape)
-        mouth_pos = (frame.position[0], frame.position[1] + mouth_offset)
-        cv2.circle(img, mouth_pos, 10, (255, 255, 255, 255), -1)
+        draw_width = end_x - start_x
+        draw_height = end_y - start_y
         
-        # 感情による色調整
-        if frame.emotion == "happy":
-            img[img[:, :, 3] > 0] = self._apply_emotion_color_filter(img[img[:, :, 3] > 0], "happy")
-        elif frame.emotion == "sad":
-            img[img[:, :, 3] > 0] = self._apply_emotion_color_filter(img[img[:, :, 3] > 0], "sad")
+        if draw_width > 0 and draw_height > 0:
+            # キャラクター描画（簡単な図形で代用）
+            char_color = self._get_character_color(frame.speaker, frame.emotion)
+            
+            # キャラクター本体（楕円）
+            center_x = start_x + draw_width // 2
+            center_y = start_y + draw_height // 2
+            
+            # 楕円描画
+            cv2.ellipse(
+                img, 
+                (center_x, center_y), 
+                (draw_width // 3, draw_height // 3), 
+                0, 0, 360, 
+                (*char_color, 255),  # RGBA
+                -1
+            )
+            
+            # 口の形状描画
+            mouth_y = center_y + draw_height // 6
+            mouth_shape = self._get_mouth_shape_geometry(frame.mouth_shape)
+            
+            for shape in mouth_shape:
+                cv2.ellipse(
+                    img,
+                    (center_x, mouth_y),
+                    shape["size"],
+                    0, 0, 360,
+                    (0, 0, 0, 255),  # 黒い口
+                    -1
+                )
+            
+            # 感情に基づく色フィルタ適用
+            if video_config.get("emotion_effects", True):
+                img = self._apply_emotion_color_filter(img, frame.emotion)
         
         return img
 
@@ -664,7 +718,7 @@ class CharacterSynthesizer:
         video_config: Dict[str, Any]
     ) -> 'np.ndarray':
         """
-        品質最適化されたフレーム画像を作成
+        品質最適化フレーム画像作成（実際のRGBA画像生成）
         
         Args:
             frame: キャラクターフレーム
@@ -673,31 +727,68 @@ class CharacterSynthesizer:
             video_config: 動画設定
             
         Returns:
-            最適化された画像
+            RGBA画像（numpy配列）
         """
-        # 基本画像を作成
-        img = np.zeros((height, width, 3), dtype=np.uint8)
+        if not VIDEO_PROCESSING_AVAILABLE:
+            # モック実装
+            return np.full((height, width, 4), [240, 248, 255, 255], dtype=np.uint8)
         
-        # 品質最適化設定を適用
-        post_processing = video_config.get("post_processing", {})
+        # 背景色設定
+        bg_color = video_config.get("background_color", [240, 248, 255, 255])  # Alice Blue
+        img = np.full((height, width, 4), bg_color, dtype=np.uint8)
         
         # キャラクター描画
-        color = (100, 150, 200) if frame.speaker == "reimu" else (200, 150, 100)
-        cv2.circle(img, frame.position, 50, color, -1)
+        char_x, char_y = frame.position
+        scale = frame.scale
         
-        # 口形状描画
-        mouth_offset = self._get_mouth_offset(frame.mouth_shape)
-        mouth_pos = (frame.position[0], frame.position[1] + mouth_offset)
-        cv2.circle(img, mouth_pos, 10, (255, 255, 255), -1)
+        # キャラクターサイズ
+        char_width = int(400 * scale)
+        char_height = int(600 * scale)
         
-        # ポストプロセッシング適用
-        if post_processing.get("noise_reduction", False):
-            img = cv2.bilateralFilter(img, 9, 75, 75)
+        # 描画領域計算
+        start_x = max(0, char_x - char_width // 2)
+        end_x = min(width, char_x + char_width // 2)
+        start_y = max(0, char_y - char_height // 2)
+        end_y = min(height, char_y + char_height // 2)
         
-        if post_processing.get("color_correction", False):
+        draw_width = end_x - start_x
+        draw_height = end_y - start_y
+        
+        if draw_width > 0 and draw_height > 0:
+            # キャラクター描画
+            char_color = self._get_character_color(frame.speaker, frame.emotion)
+            center_x = start_x + draw_width // 2
+            center_y = start_y + draw_height // 2
+            
+            # キャラクター本体
+            cv2.ellipse(
+                img,
+                (center_x, center_y),
+                (draw_width // 3, draw_height // 3),
+                0, 0, 360,
+                (*char_color, 255),
+                -1
+            )
+            
+            # 口の形状
+            mouth_y = center_y + draw_height // 6
+            mouth_shapes = self._get_mouth_shape_geometry(frame.mouth_shape)
+            
+            for shape in mouth_shapes:
+                cv2.ellipse(
+                    img,
+                    (center_x, mouth_y),
+                    shape["size"],
+                    0, 0, 360,
+                    (0, 0, 0, 255),
+                    -1
+                )
+        
+        # 品質向上処理
+        if video_config.get("color_correction", True):
             img = self._apply_color_correction(img)
-        
-        if post_processing.get("sharpening", False):
+            
+        if video_config.get("sharpening", False):
             img = self._apply_sharpening(img)
         
         return img
@@ -710,7 +801,7 @@ class CharacterSynthesizer:
         video_config: Dict[str, Any]
     ) -> None:
         """
-        PNG連番画像を透明背景動画に変換
+        PNG連番→透明動画変換（実際のffmpeg実行）
         
         Args:
             temp_dir: 一時ディレクトリ
@@ -718,65 +809,190 @@ class CharacterSynthesizer:
             fps: フレームレート
             video_config: 動画設定
         """
-        # 実際の実装では subprocess を使用してffmpegを呼び出し
-        # 例: ffmpeg -r 30 -i frame_%06d.png -c:v libx264 -pix_fmt yuva420p output.mp4
+        if not VIDEO_PROCESSING_AVAILABLE:
+            self.logger.warning("ffmpeg not available. Using mock implementation.")
+            with open(output_path, 'w') as f:
+                f.write(f"Mock transparent video from PNG sequence (fps={fps})")
+            return
         
-        # モック実装（テスト用）
-        with open(output_path, 'w') as f:
-            f.write(f"Transparent video: {fps}fps, frames in {temp_dir}")
-        
-        self.logger.info(f"透明背景動画変換完了: {output_path}")
+        try:
+            # ffmpegコマンド構築
+            input_pattern = os.path.join(temp_dir, "frame_%06d.png")
+            
+            # 基本設定
+            stream = ffmpeg.input(input_pattern, framerate=fps)
+            
+            # エンコード設定
+            codec = video_config.get("codec", "libx264")
+            crf = video_config.get("crf", 23)
+            preset = video_config.get("preset", "medium")
+            
+            if video_config.get("transparency", False):
+                # 透明背景対応
+                stream = ffmpeg.output(
+                    stream,
+                    output_path,
+                    vcodec=codec,
+                    pix_fmt="yuva420p",  # アルファチャンネル対応
+                    crf=crf,
+                    preset=preset,
+                    movflags="faststart"
+                )
+            else:
+                # 標準エンコード
+                stream = ffmpeg.output(
+                    stream,
+                    output_path,
+                    vcodec=codec,
+                    pix_fmt="yuv420p",
+                    crf=crf,
+                    preset=preset,
+                    movflags="faststart"
+                )
+            
+            # 既存ファイルを上書き
+            stream = ffmpeg.overwrite_output(stream)
+            
+            # ffmpeg実行
+            self.logger.info(f"ffmpeg実行開始: {input_pattern} -> {output_path}")
+            ffmpeg.run(stream, quiet=video_config.get("quiet", True))
+            
+            # ファイル存在確認
+            if os.path.exists(output_path):
+                file_size = os.path.getsize(output_path) / (1024 * 1024)  # MB
+                self.logger.info(f"動画生成完了: {output_path} ({file_size:.2f}MB)")
+            else:
+                raise CharacterSynthesizerError("動画ファイルが生成されませんでした")
+                
+        except Exception as e:
+            self.logger.error(f"ffmpeg実行エラー: {e}")
+            raise CharacterSynthesizerError(f"動画変換失敗: {e}")
 
-    def _apply_emotion_color_filter(self, pixels: 'np.ndarray', emotion: str) -> 'np.ndarray':
+    def _get_character_color(self, speaker: str, emotion: str) -> Tuple[int, int, int]:
         """
-        感情に基づく色フィルタを適用
+        キャラクター色取得
         
         Args:
-            pixels: ピクセルデータ
+            speaker: 話者
             emotion: 感情
             
         Returns:
-            フィルタ適用後のピクセルデータ
+            RGB色タプル
+        """
+        # 基本色
+        base_colors = {
+            "reimu": (255, 100, 100),  # 赤系
+            "marisa": (255, 255, 100),  # 黄系
+        }
+        
+        # 感情による色調整
+        emotion_modifiers = {
+            "happy": (1.1, 1.1, 1.0),
+            "sad": (0.7, 0.7, 1.0),
+            "angry": (1.2, 0.8, 0.8),
+            "surprised": (1.0, 1.0, 1.2),
+            "neutral": (1.0, 1.0, 1.0)
+        }
+        
+        base_color = base_colors.get(speaker, (200, 200, 200))
+        modifier = emotion_modifiers.get(emotion, (1.0, 1.0, 1.0))
+        
+        # 色調整
+        adjusted_color = tuple(
+            min(255, max(0, int(base * mod)))
+            for base, mod in zip(base_color, modifier)
+        )
+        
+        return adjusted_color
+
+    def _get_mouth_shape_geometry(self, mouth_shape: str) -> List[Dict[str, Any]]:
+        """
+        口形状ジオメトリ取得
+        
+        Args:
+            mouth_shape: 口形状
+            
+        Returns:
+            描画用ジオメトリリスト
+        """
+        mouth_shapes = {
+            "a": [{"size": (15, 20)}],
+            "i": [{"size": (8, 15)}],
+            "u": [{"size": (12, 12)}],
+            "e": [{"size": (18, 10)}],
+            "o": [{"size": (12, 18)}],
+            "silence": [{"size": (5, 3)}]
+        }
+        
+        return mouth_shapes.get(mouth_shape, mouth_shapes["silence"])
+
+    def _apply_emotion_color_filter(self, pixels: 'np.ndarray', emotion: str) -> 'np.ndarray':
+        """
+        感情ベース色フィルタ適用（実際の画像処理）
+        
+        Args:
+            pixels: RGBA画像
+            emotion: 感情
+            
+        Returns:
+            フィルタ適用後画像
         """
         if emotion == "happy":
-            # 暖色系にシフト
-            pixels[:, 0] = np.minimum(pixels[:, 0] * 1.1, 255)  # 青を強調
-            pixels[:, 1] = np.minimum(pixels[:, 1] * 1.05, 255)  # 緑を少し強調
+            # 明度アップ
+            pixels[:, :, :3] = np.clip(pixels[:, :, :3] * 1.1, 0, 255)
         elif emotion == "sad":
-            # 寒色系にシフト
-            pixels[:, 2] = np.minimum(pixels[:, 2] * 1.1, 255)  # 赤を強調
-            pixels[:, 1] = pixels[:, 1] * 0.9  # 緑を減少
+            # 青みがかった色調
+            pixels[:, :, 2] = np.clip(pixels[:, :, 2] * 1.2, 0, 255)
+            pixels[:, :, :2] = np.clip(pixels[:, :, :2] * 0.9, 0, 255)
+        elif emotion == "angry":
+            # 赤みがかった色調
+            pixels[:, :, 0] = np.clip(pixels[:, :, 0] * 1.2, 0, 255)
+            pixels[:, :, 1:3] = np.clip(pixels[:, :, 1:3] * 0.9, 0, 255)
+        elif emotion == "surprised":
+            # 高コントラスト
+            pixels[:, :, :3] = np.clip((pixels[:, :, :3] - 128) * 1.2 + 128, 0, 255)
         
-        return pixels
+        return pixels.astype(np.uint8)
 
     def _apply_color_correction(self, img: 'np.ndarray') -> 'np.ndarray':
         """
-        色補正を適用
+        色補正適用（実際の画像処理）
         
         Args:
-            img: 入力画像
+            img: RGBA画像
             
         Returns:
-            色補正後の画像
+            補正後画像
         """
         # ガンマ補正
         gamma = 1.2
-        inv_gamma = 1.0 / gamma
-        table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
-        return cv2.LUT(img, table)
+        gamma_table = np.array([((i / 255.0) ** (1.0 / gamma)) * 255 for i in range(256)]).astype(np.uint8)
+        
+        # RGB チャンネルのみに適用
+        img[:, :, :3] = cv2.LUT(img[:, :, :3], gamma_table)
+        
+        return img
 
     def _apply_sharpening(self, img: 'np.ndarray') -> 'np.ndarray':
         """
-        シャープネスフィルタを適用
+        シャープネスフィルタ適用（実際の画像処理）
         
         Args:
-            img: 入力画像
+            img: RGBA画像
             
         Returns:
-            シャープネス適用後の画像
+            シャープネス適用後画像
         """
-        kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
-        return cv2.filter2D(img, -1, kernel)
+        # シャープネスカーネル
+        kernel = np.array([[-1, -1, -1],
+                          [-1,  9, -1],
+                          [-1, -1, -1]])
+        
+        # RGB チャンネルのみに適用
+        for c in range(3):
+            img[:, :, c] = cv2.filter2D(img[:, :, c], -1, kernel)
+        
+        return np.clip(img, 0, 255).astype(np.uint8)
 
     async def _save_video_generation_metadata(
         self,

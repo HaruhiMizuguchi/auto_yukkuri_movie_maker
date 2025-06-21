@@ -201,6 +201,68 @@ class CharacterSynthesisDAO:
             self.logger.error(f"スクリプトデータ取得エラー: project_id={project_id}: {e}")
             raise
     
+    def save_audio_metadata(self, project_id: str, audio_metadata: Dict[str, Any]) -> None:
+        """
+        音声メタデータを保存（テスト用）
+        
+        Args:
+            project_id: プロジェクトID
+            audio_metadata: 音声メタデータ
+        """
+        try:
+            # テスト用の簡単な実装
+            # 実際の実装では workflow_steps テーブルに保存
+            tts_data = {
+                "audio_metadata": audio_metadata,
+                "audio_segments": audio_metadata.get("segments", []),
+                "combined_audio_path": f"files/audio/{project_id}_combined.wav"
+            }
+            
+            with self.db_manager.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # workflow_steps テーブルに TTS 結果として保存
+                cursor.execute("""
+                    INSERT OR REPLACE INTO workflow_steps 
+                    (project_id, step_number, step_name, status, output_data, completed_at)
+                    VALUES (?, 4, 'tts_generation', 'completed', ?, ?)
+                """, (project_id, json.dumps(tts_data), datetime.now().isoformat()))
+                
+                conn.commit()
+            
+            self.logger.info(f"音声メタデータ保存完了: project_id={project_id}")
+            
+        except Exception as e:
+            self.logger.error(f"音声メタデータ保存エラー: {e}")
+            raise
+    
+    def save_character_config(self, project_id: str, character_config: Dict[str, Any]) -> None:
+        """
+        キャラクター設定を保存（テスト用）
+        
+        Args:
+            project_id: プロジェクトID
+            character_config: キャラクター設定
+        """
+        try:
+            with self.db_manager.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # workflow_steps テーブルにキャラクター設定として保存
+                cursor.execute("""
+                    INSERT OR REPLACE INTO workflow_steps 
+                    (project_id, step_number, step_name, status, output_data, completed_at)
+                    VALUES (?, 0, 'character_config', 'completed', ?, ?)
+                """, (project_id, json.dumps(character_config), datetime.now().isoformat()))
+                
+                conn.commit()
+            
+            self.logger.info(f"キャラクター設定保存完了: project_id={project_id}")
+            
+        except Exception as e:
+            self.logger.error(f"キャラクター設定保存エラー: {e}")
+            raise
+    
     def get_character_config(self, project_id: str) -> Dict[str, Any]:
         """
         キャラクター設定を取得

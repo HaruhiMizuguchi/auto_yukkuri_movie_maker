@@ -19,15 +19,21 @@ from .theme_selector import (
     GeminiThemeLLM
 )
 
+# その他のモジュール
+from .script_generator import ScriptGenerator
+from .title_generator import TitleGenerator
+from .tts_processor import TTSProcessor
+from .character_synthesizer import CharacterSynthesizer
+
 __version__ = "1.0.0"
 
 # 各モジュールの実装状況
 MODULE_STATUS = {
     "theme_selection": "実装済み",
-    "script_generation": "未実装",
-    "title_generation": "未実装", 
-    "tts_generation": "未実装",
-    "character_synthesis": "未実装",
+    "script_generation": "実装済み",
+    "title_generation": "実装済み", 
+    "tts_generation": "実装済み",
+    "character_synthesis": "実装中",
     "background_generation": "未実装",
     "background_animation": "未実装",
     "subtitle_generation": "未実装",
@@ -48,5 +54,10 @@ __all__ = [
     "ThemeCandidate",
     "SelectedTheme",
     "DatabaseDataAccess",
-    "GeminiThemeLLM"
+    "GeminiThemeLLM",
+    # その他のモジュール
+    "ScriptGenerator",
+    "TitleGenerator",
+    "TTSProcessor",
+    "CharacterSynthesizer"
 ] 

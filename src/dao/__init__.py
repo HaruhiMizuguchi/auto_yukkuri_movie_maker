@@ -8,10 +8,12 @@ from .theme_selection_dao import ThemeSelectionDAO
 from .script_generation_dao import ScriptGenerationDAO
 from .title_generation_dao import TitleGenerationDAO
 from .tts_generation_dao import TTSGenerationDAO
+from .character_synthesis_dao import CharacterSynthesisDAO
 
 __all__ = [
     "ThemeSelectionDAO",
     "ScriptGenerationDAO", 
     "TitleGenerationDAO",
-    "TTSGenerationDAO"
+    "TTSGenerationDAO",
+    "CharacterSynthesisDAO"
 ] 

@@ -312,6 +312,36 @@ class GeminiLLMClient:
                 retry_recommended=True
             )
     
+    async def generate_text_async(
+        self, 
+        prompt: str, 
+        model: ModelType = ModelType.GEMINI_2_0_FLASH,
+        **kwargs
+    ) -> str:
+        """簡単なテキスト生成（非同期版）"""
+        gemini_request = GeminiRequest(
+            prompt=prompt,
+            model=model,
+            **kwargs
+        )
+        
+        response = await self.generate_text(gemini_request)
+        return response.text
+    
+    def generate_text_sync(
+        self, 
+        prompt: str, 
+        model: ModelType = ModelType.GEMINI_2_0_FLASH,
+        **kwargs
+    ) -> str:
+        """簡単なテキスト生成（同期版）"""
+        try:
+            loop = asyncio.get_event_loop()
+            return loop.run_until_complete(self.generate_text_async(prompt, model, **kwargs))
+        except RuntimeError:
+            # 新しいイベントループを作成
+            return asyncio.run(self.generate_text_async(prompt, model, **kwargs))
+    
     async def count_tokens(self, text: str, model: ModelType = ModelType.GEMINI_2_0_FLASH) -> int:
         """トークン数カウント"""
         try:

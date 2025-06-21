@@ -27,6 +27,71 @@ class CharacterSynthesisDAO:
         """
         self.db_manager = db_manager
         self.logger = logger or logging.getLogger(__name__)
+        
+        # 必要なテーブルを作成
+        self._ensure_tables()
+    
+    def _ensure_tables(self):
+        """必要なテーブルを作成"""
+        try:
+            with self.db_manager.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # facial_expressionsテーブル
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS facial_expressions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        project_id TEXT NOT NULL,
+                        timestamp REAL NOT NULL,
+                        speaker TEXT NOT NULL,
+                        primary_emotion TEXT NOT NULL,
+                        emotion_weights TEXT NOT NULL,  -- JSON形式
+                        transition_state TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (project_id) REFERENCES projects (id)
+                    )
+                """)
+                
+                # emotion_transitionsテーブル
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS emotion_transitions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        project_id TEXT NOT NULL,
+                        start_time REAL NOT NULL,
+                        end_time REAL NOT NULL,
+                        from_emotion TEXT NOT NULL,
+                        to_emotion TEXT NOT NULL,
+                        speaker TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (project_id) REFERENCES projects (id)
+                    )
+                """)
+                
+                # video_generation_resultsテーブル
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS video_generation_results (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        project_id TEXT NOT NULL,
+                        generation_type TEXT NOT NULL,
+                        video_path TEXT NOT NULL,
+                        generation_config TEXT,  -- JSON形式
+                        result_data TEXT NOT NULL,  -- JSON形式
+                        file_size_mb REAL,
+                        generation_time_seconds REAL,
+                        quality_score REAL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (project_id) REFERENCES projects (id),
+                        UNIQUE(project_id, generation_type)
+                    )
+                """)
+                
+                conn.commit()
+            
+            self.logger.info("キャラクター合成用テーブル作成完了")
+            
+        except Exception as e:
+            self.logger.error(f"テーブル作成エラー: {e}")
+            raise
     
     def get_audio_metadata(self, project_id: str) -> Dict[str, Any]:
         """
@@ -593,4 +658,154 @@ class CharacterSynthesisDAO:
                 
         except Exception as e:
             self.logger.error(f"表情データ取得エラー: project_id={project_id}: {e}")
-            return None 
+            return None
+    
+    def save_video_generation_result(self, project_id: str, generation_type: str, result_data: Dict[str, Any]) -> None:
+        """
+        動画生成結果を保存
+        
+        Args:
+            project_id: プロジェクトID
+            generation_type: 生成タイプ（transparency, framerate_30, quality_optimized等）
+            result_data: 結果データ
+        """
+        try:
+            # 結果データからメタデータを抽出
+            video_path = result_data.get("video_path", "")
+            generation_config = result_data.get("generation_config", {})
+            file_size_mb = result_data.get("file_size_mb", 0.0)
+            generation_time_seconds = result_data.get("generation_time_seconds", 0.0)
+            
+            # 品質スコアを計算
+            quality_score = 0.0
+            if "quality_assessment" in result_data:
+                quality_score = result_data["quality_assessment"].get("overall_quality", 0.0)
+            elif "quality_score" in result_data:
+                quality_score = result_data["quality_score"]
+            elif "quality_metrics" in result_data:
+                metrics = result_data["quality_metrics"]
+                # PSNR, SSIM, VMEFから総合スコアを計算
+                psnr_score = min(metrics.get("psnr", 0) / 50.0 * 100, 100)
+                ssim_score = metrics.get("ssim", 0) * 100
+                vmaf_score = metrics.get("vmaf", 0)
+                quality_score = (psnr_score + ssim_score + vmaf_score) / 3
+            
+            # データベースに保存（UPSERT）
+            with self.db_manager.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT OR REPLACE INTO video_generation_results 
+                    (project_id, generation_type, video_path, generation_config, result_data, 
+                     file_size_mb, generation_time_seconds, quality_score)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    project_id,
+                    generation_type,
+                    video_path,
+                    json.dumps(generation_config),
+                    json.dumps(result_data),
+                    file_size_mb,
+                    generation_time_seconds,
+                    quality_score
+                ))
+                conn.commit()
+            
+            self.logger.info(
+                f"動画生成結果保存完了: project_id={project_id}, type={generation_type}, "
+                f"size={file_size_mb}MB, quality={quality_score:.1f}"
+            )
+            
+        except Exception as e:
+            self.logger.error(f"動画生成結果保存エラー: project_id={project_id}, type={generation_type}: {e}")
+            raise
+
+    def get_video_generation_result(self, project_id: str, generation_type: str) -> Optional[Dict[str, Any]]:
+        """
+        動画生成結果を取得
+        
+        Args:
+            project_id: プロジェクトID
+            generation_type: 生成タイプ
+            
+        Returns:
+            動画生成結果、または None
+        """
+        try:
+            with self.db_manager.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT video_path, generation_config, result_data, file_size_mb, 
+                           generation_time_seconds, quality_score, created_at
+                    FROM video_generation_results 
+                    WHERE project_id = ? AND generation_type = ?
+                """, (project_id, generation_type))
+                
+                result = cursor.fetchone()
+                if not result:
+                    return None
+                
+                # JSONデータをパース
+                generation_config = json.loads(result[1]) if result[1] else {}
+                result_data = json.loads(result[2])
+                
+                # メタデータを追加
+                result_data["video_path"] = result[0]
+                result_data["generation_config"] = generation_config
+                result_data["file_size_mb"] = result[3]
+                result_data["generation_time_seconds"] = result[4]
+                result_data["quality_score"] = result[5]
+                result_data["created_at"] = result[6]
+                
+                self.logger.info(
+                    f"動画生成結果取得完了: project_id={project_id}, type={generation_type}"
+                )
+                
+                return result_data
+                
+        except Exception as e:
+            self.logger.error(f"動画生成結果取得エラー: project_id={project_id}, type={generation_type}: {e}")
+            return None
+
+    def get_all_video_generation_results(self, project_id: str) -> List[Dict[str, Any]]:
+        """
+        プロジェクトの全動画生成結果を取得
+        
+        Args:
+            project_id: プロジェクトID
+            
+        Returns:
+            動画生成結果のリスト
+        """
+        try:
+            with self.db_manager.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT generation_type, video_path, file_size_mb, 
+                           generation_time_seconds, quality_score, created_at
+                    FROM video_generation_results 
+                    WHERE project_id = ?
+                    ORDER BY created_at DESC
+                """, (project_id,))
+                
+                results = cursor.fetchall()
+                if not results:
+                    return []
+                
+                video_results = []
+                for result in results:
+                    video_results.append({
+                        "generation_type": result[0],
+                        "video_path": result[1],
+                        "file_size_mb": result[2],
+                        "generation_time_seconds": result[3],
+                        "quality_score": result[4],
+                        "created_at": result[5]
+                    })
+                
+                self.logger.info(f"全動画生成結果取得完了: project_id={project_id}, count={len(video_results)}")
+                
+                return video_results
+                
+        except Exception as e:
+            self.logger.error(f"全動画生成結果取得エラー: project_id={project_id}: {e}")
+            return [] 

@@ -182,17 +182,38 @@ class CharacterSynthesizer:
             # 4. 感情フレーム生成
             emotion_frames = self._generate_emotion_frames(emotion_data)
             
-            # 5. キャラクターフレーム統合
-            character_frames = self._integrate_character_frames(
-                lip_sync_frames, emotion_frames, character_config
+            # 5. 【NEW】表情制御フレーム生成
+            facial_expression_frames = self._generate_facial_expression_frames(
+                emotion_frames, character_config
             )
             
-            # 6. 動画生成
+            # 6. 【NEW】表情データの保存
+            facial_expression_data = {
+                "project_id": project_id,
+                "expression_frames": facial_expression_frames,
+                "transitions": self._detect_emotion_transitions([
+                    {
+                        "start_time": frame.start_time,
+                        "end_time": frame.end_time,
+                        "emotion": frame.emotion,
+                        "speaker": frame.speaker
+                    }
+                    for frame in emotion_frames
+                ])
+            }
+            self.dao.save_facial_expression_data(project_id, facial_expression_data)
+            
+            # 7. キャラクターフレーム統合（表情制御統合版）
+            character_frames = self._integrate_character_frames_with_expressions(
+                lip_sync_frames, emotion_frames, facial_expression_frames, character_config
+            )
+            
+            # 8. 動画生成
             video_path = await self._generate_character_video(
                 project_id, character_frames, audio_metadata, character_config
             )
             
-            # 7. 結果作成
+            # 9. 結果作成（表情制御情報追加）
             result = CharacterSynthesisResult(
                 character_video_path=video_path,
                 total_duration=audio_metadata["total_duration"],
@@ -203,12 +224,13 @@ class CharacterSynthesizer:
                 video_metadata=self._create_video_metadata(character_config, audio_metadata)
             )
             
-            # 8. データベースに保存
-            await self._save_synthesis_result(project_id, result)
+            # 10. データベースに保存（表情制御統合版）
+            await self._save_synthesis_result_with_expressions(project_id, result, facial_expression_data)
             
             self.logger.info(
                 f"キャラクターアニメーション合成完了: project_id={project_id}, "
-                f"duration={result.total_duration:.2f}s, frames={result.frame_count}"
+                f"duration={result.total_duration:.2f}s, frames={result.frame_count}, "
+                f"facial_expressions={len(facial_expression_frames)}"
             )
             
             return result.to_dict()
@@ -664,7 +686,7 @@ class CharacterSynthesizer:
     
     async def cleanup_video_files(self, project_id: str) -> None:
         """
-        一時動画ファイルをクリーンアップ
+        生成された動画ファイルをクリーンアップ
         
         Args:
             project_id: プロジェクトID
@@ -674,15 +696,401 @@ class CharacterSynthesizer:
             video_dir = os.path.join(project_dir, "files", "video")
             
             if os.path.exists(video_dir):
-                for file in os.listdir(video_dir):
-                    if file.startswith("temp_") or file.startswith("intermediate_"):
-                        file_path = os.path.join(video_dir, file)
-                        os.remove(file_path)
-                        self.logger.debug(f"一時ファイル削除: {file_path}")
+                import shutil
+                shutil.rmtree(video_dir)
+                os.makedirs(video_dir, exist_ok=True)
+                
+                self.logger.info(f"動画ファイルクリーンアップ完了: project_id={project_id}")
             
         except Exception as e:
             self.logger.warning(f"動画ファイルクリーンアップエラー: project_id={project_id}: {e}")
     
+    # =================================================================
+    # Phase 4-5-2: 表情制御機能（新規追加）
+    # =================================================================
+    
+    def _detect_emotion_transitions(self, emotion_segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        表情切り替えタイミングの検出
+        
+        Args:
+            emotion_segments: 感情セグメントのリスト
+            
+        Returns:
+            感情切り替えポイントのリスト
+        """
+        transition_points = []
+        
+        for i in range(len(emotion_segments) - 1):
+            current_segment = emotion_segments[i]
+            next_segment = emotion_segments[i + 1]
+            
+            # 同じスピーカーで感情が変わる場合
+            if (current_segment["speaker"] == next_segment["speaker"] and
+                current_segment["emotion"] != next_segment["emotion"]):
+                
+                transition_point = {
+                    "transition_time": current_segment["end_time"],
+                    "from_emotion": current_segment["emotion"],
+                    "to_emotion": next_segment["emotion"],
+                    "speaker": current_segment["speaker"],
+                    "confidence": 1.0
+                }
+                transition_points.append(transition_point)
+        
+        return transition_points
+    
+    def _interpolate_facial_expression(
+        self, 
+        transition: Dict[str, Any], 
+        frame_rate: int = 30
+    ) -> List[Dict[str, Any]]:
+        """
+        自然な表情変化の補間
+        
+        Args:
+            transition: 感情切り替えデータ
+            frame_rate: フレームレート
+            
+        Returns:
+            補間された表情フレームのリスト
+        """
+        interpolated_frames = []
+        
+        start_time = transition["start_time"]
+        end_time = transition["end_time"]
+        duration = end_time - start_time
+        frame_count = int(duration * frame_rate)
+        
+        from_emotion = transition["from_emotion"]
+        to_emotion = transition["to_emotion"]
+        speaker = transition["speaker"]
+        
+        for i in range(frame_count):
+            # 補間係数（0.0 → 1.0）
+            alpha = i / (frame_count - 1) if frame_count > 1 else 1.0
+            
+            # 時刻計算
+            timestamp = start_time + (i / frame_rate)
+            
+            # 感情重みの補間（イージング関数を使用）
+            eased_alpha = self._ease_in_out_cubic(alpha)
+            from_weight = 1.0 - eased_alpha
+            to_weight = eased_alpha
+            
+            # 感情重みマップ
+            emotion_weights = {
+                from_emotion: from_weight,
+                to_emotion: to_weight
+            }
+            
+            # 他の感情の重みを0にする
+            all_emotions = ["neutral", "happy", "sad", "surprised", "angry"]
+            for emotion in all_emotions:
+                if emotion not in emotion_weights:
+                    emotion_weights[emotion] = 0.0
+            
+            frame = {
+                "timestamp": timestamp,
+                "speaker": speaker,
+                "emotion_weights": emotion_weights,
+                "transition_alpha": eased_alpha
+            }
+            interpolated_frames.append(frame)
+        
+        return interpolated_frames
+    
+    def _resolve_emotion_conflict(self, conflicting_emotions: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        複数感情の優先度処理
+        
+        Args:
+            conflicting_emotions: 競合する感情のリスト
+            
+        Returns:
+            優先度解決された感情データ
+        """
+        if not conflicting_emotions:
+            return {
+                "emotion": "neutral",
+                "confidence": 1.0,
+                "secondary_emotions": []
+            }
+        
+        # 信頼度順にソート
+        sorted_emotions = sorted(
+            conflicting_emotions, 
+            key=lambda x: x["confidence"], 
+            reverse=True
+        )
+        
+        primary = sorted_emotions[0]
+        secondary_emotions = sorted_emotions[1:] if len(sorted_emotions) > 1 else []
+        
+        return {
+            "emotion": primary["emotion"],
+            "confidence": primary["confidence"],
+            "keywords": primary.get("keywords", []),
+            "secondary_emotions": secondary_emotions
+        }
+    
+    def _ease_in_out_cubic(self, t: float) -> float:
+        """
+        3次のイーズイン・イーズアウト関数
+        
+        Args:
+            t: 時間係数（0.0〜1.0）
+            
+        Returns:
+            イージング適用後の値（0.0〜1.0）
+        """
+        if t < 0.5:
+            return 4 * t * t * t
+        else:
+            return 1 - pow(-2 * t + 2, 3) / 2
+    
+    def _generate_facial_expression_frames(
+        self,
+        emotion_frames: List[EmotionFrame],
+        character_config: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """
+        表情フレームを生成
+        
+        Args:
+            emotion_frames: 感情フレーム
+            character_config: キャラクター設定
+            
+        Returns:
+            表情フレームのリスト
+        """
+        expression_frames = []
+        animation_config = character_config.get("animation", {})
+        frame_rate = animation_config.get("frame_rate", 30)
+        
+        if not emotion_frames:
+            return expression_frames
+        
+        # 感情セグメントから切り替えポイントを検出
+        emotion_segments = []
+        for frame in emotion_frames:
+            emotion_segments.append({
+                "start_time": frame.start_time,
+                "end_time": frame.end_time,
+                "emotion": frame.emotion,
+                "speaker": frame.speaker
+            })
+        
+        transition_points = self._detect_emotion_transitions(emotion_segments)
+        
+        # 各感情セグメントに対して表情フレームを生成
+        for emotion_frame in emotion_frames:
+            segment_duration = emotion_frame.end_time - emotion_frame.start_time
+            segment_frame_count = int(segment_duration * frame_rate)
+            
+            for i in range(segment_frame_count):
+                timestamp = emotion_frame.start_time + (i / frame_rate)
+                
+                # 現在時刻で切り替え中かチェック
+                in_transition = False
+                transition_weights = None
+                
+                for transition in transition_points:
+                    if (transition["speaker"] == emotion_frame.speaker and
+                        abs(timestamp - transition["transition_time"]) < 0.5):
+                        
+                        # 切り替え補間を適用
+                        transition_data = {
+                            "start_time": transition["transition_time"] - 0.25,
+                            "end_time": transition["transition_time"] + 0.25,
+                            "from_emotion": transition["from_emotion"],
+                            "to_emotion": transition["to_emotion"],
+                            "speaker": transition["speaker"]
+                        }
+                        
+                        interpolated = self._interpolate_facial_expression(transition_data, frame_rate)
+                        
+                        # 最も近いフレームを選択
+                        closest_frame = min(
+                            interpolated,
+                            key=lambda f: abs(f["timestamp"] - timestamp)
+                        )
+                        
+                        if closest_frame:
+                            transition_weights = closest_frame["emotion_weights"]
+                            in_transition = True
+                            break
+                
+                # 表情重み決定
+                if in_transition and transition_weights:
+                    emotion_weights = transition_weights
+                    transition_state = "transitioning"
+                else:
+                    emotion_weights = {emotion_frame.emotion: 1.0}
+                    transition_state = "stable"
+                
+                # 未定義感情の重みを0にする
+                all_emotions = ["neutral", "happy", "sad", "surprised", "angry"]
+                for emotion in all_emotions:
+                    if emotion not in emotion_weights:
+                        emotion_weights[emotion] = 0.0
+                
+                frame_data = {
+                    "timestamp": timestamp,
+                    "speaker": emotion_frame.speaker,
+                    "primary_emotion": emotion_frame.emotion,
+                    "emotion_weights": emotion_weights,
+                    "transition_state": transition_state
+                }
+                expression_frames.append(frame_data)
+        
+        return expression_frames
+
+    def _integrate_character_frames_with_expressions(
+        self,
+        lip_sync_frames: List[LipSyncFrame],
+        emotion_frames: List[EmotionFrame],
+        facial_expression_frames: List[Dict[str, Any]],
+        character_config: Dict[str, Any]
+    ) -> List[CharacterFrame]:
+        """
+        表情制御統合版のキャラクターフレーム統合
+        
+        Args:
+            lip_sync_frames: 口パク同期フレーム
+            emotion_frames: 感情フレーム  
+            facial_expression_frames: 表情制御フレーム
+            character_config: キャラクター設定
+            
+        Returns:
+            統合されたキャラクターフレーム
+        """
+        animation_config = character_config.get("animation", {})
+        frame_rate = animation_config.get("frame_rate", 30)
+        character_positions = animation_config.get("character_position", {})
+        
+        # 全時間を通してフレームを生成
+        if not lip_sync_frames:
+            return []
+        
+        total_duration = max(frame.end_time for frame in lip_sync_frames)
+        frame_count = int(total_duration * frame_rate)
+        
+        character_frames = []
+        
+        for i in range(frame_count):
+            timestamp = i / frame_rate
+            
+            # 現在時刻の口パク情報を取得
+            current_lip_sync = self._find_frame_at_time(lip_sync_frames, timestamp)
+            
+            # 現在時刻の基本感情情報を取得
+            current_emotion = self._find_emotion_at_time(emotion_frames, timestamp)
+            
+            # 現在時刻の表情制御情報を取得（新機能）
+            current_expression = self._find_expression_at_time(facial_expression_frames, timestamp)
+            
+            if current_lip_sync:
+                speaker = current_lip_sync.speaker
+                mouth_shape = current_lip_sync.mouth_shape
+                
+                # 表情制御による感情決定
+                if current_expression:
+                    # 表情制御データがある場合は重み付き感情を使用
+                    emotion_weights = current_expression.get("emotion_weights", {})
+                    primary_emotion = current_expression.get("primary_emotion", "neutral")
+                    
+                    # 最も重みの大きい感情を使用
+                    emotion = max(emotion_weights.items(), key=lambda x: x[1])[0] if emotion_weights else primary_emotion
+                else:
+                    # 表情制御データがない場合は基本感情を使用
+                    emotion = current_emotion.emotion if current_emotion else "neutral"
+                
+                position = character_positions.get(speaker, {"x": 500, "y": 300})
+                
+                frame = CharacterFrame(
+                    timestamp=timestamp,
+                    speaker=speaker,
+                    mouth_shape=mouth_shape,
+                    emotion=emotion,
+                    position=(position["x"], position["y"]),
+                    scale=animation_config.get("character_scale", 0.8)
+                )
+                character_frames.append(frame)
+        
+        self.logger.info(
+            f"表情制御統合キャラクターフレーム生成完了: {len(character_frames)}フレーム, "
+            f"duration={total_duration:.2f}s, facial_expressions={len(facial_expression_frames)}"
+        )
+        return character_frames
+    
+    def _find_expression_at_time(self, expression_frames: List[Dict[str, Any]], timestamp: float) -> Optional[Dict[str, Any]]:
+        """
+        指定時刻の表情制御データを検索
+        
+        Args:
+            expression_frames: 表情制御フレーム
+            timestamp: 時刻
+            
+        Returns:
+            表情制御データ、または None
+        """
+        for frame in expression_frames:
+            frame_time = frame.get("timestamp", 0.0)
+            # 表情フレームの有効時間（通常1フレーム分 = 1/fps秒）
+            frame_duration = 1.0 / 30.0  # 30fps想定
+            
+            if frame_time <= timestamp < frame_time + frame_duration:
+                return frame
+        
+        return None
+    
+    async def _save_synthesis_result_with_expressions(
+        self,
+        project_id: str,
+        result: CharacterSynthesisResult,
+        facial_expression_data: Dict[str, Any]
+    ) -> None:
+        """
+        表情制御統合版の合成結果をデータベースに保存
+        
+        Args:
+            project_id: プロジェクトID
+            result: 合成結果
+            facial_expression_data: 表情制御データ
+        """
+        # 動画ファイル参照を登録
+        video_files = [{
+            "file_type": "video",
+            "file_category": "intermediate",
+            "file_path": result.character_video_path,
+            "file_name": os.path.basename(result.character_video_path)
+        }]
+        
+        self.dao.register_video_files(project_id, video_files)
+        
+        # 表情制御統合版の結果データを作成
+        enhanced_result = result.to_dict()
+        enhanced_result["facial_expression_data"] = {
+            "total_expression_frames": len(facial_expression_data.get("expression_frames", [])),
+            "total_transitions": len(facial_expression_data.get("transitions", [])),
+            "expression_timeline": facial_expression_data.get("expression_frames", [])[:10]  # 最初の10フレームのみ
+        }
+        enhanced_result["features"] = {
+            "lip_sync": True,
+            "emotion_analysis": True,
+            "facial_expression_control": True,
+            "natural_transitions": True
+        }
+        
+        # 合成結果を保存
+        self.dao.save_character_synthesis_result(project_id, enhanced_result)
+        
+        self.logger.info(
+            f"表情制御統合合成結果保存完了: project_id={project_id}, "
+            f"expressions={len(facial_expression_data.get('expression_frames', []))}"
+        )
+
     async def close(self) -> None:
         """リソースクリーンアップ"""
         if hasattr(self, 'llm_client') and self.llm_client:

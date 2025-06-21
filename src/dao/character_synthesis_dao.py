@@ -434,4 +434,163 @@ class CharacterSynthesisDAO:
                 
         except Exception as e:
             self.logger.error(f"キャラクター合成結果取得エラー: project_id={project_id}: {e}")
+            return None
+    
+    # =================================================================
+    # Phase 4-5-2: 表情制御機能用DAO（新規追加）
+    # =================================================================
+    
+    def save_facial_expression_data(self, project_id: str, expression_data: Dict[str, Any]) -> None:
+        """
+        表情データを保存
+        
+        Args:
+            project_id: プロジェクトID
+            expression_data: 表情データ
+        """
+        try:
+            with self.db_manager.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # facial_expressions テーブルが存在しない場合は作成
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS facial_expressions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        project_id TEXT NOT NULL,
+                        timestamp REAL NOT NULL,
+                        speaker TEXT NOT NULL,
+                        primary_emotion TEXT NOT NULL,
+                        emotion_weights TEXT NOT NULL,
+                        transition_state TEXT NOT NULL,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                
+                # emotion_transitions テーブルが存在しない場合は作成
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS emotion_transitions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        project_id TEXT NOT NULL,
+                        start_time REAL NOT NULL,
+                        end_time REAL NOT NULL,
+                        from_emotion TEXT NOT NULL,
+                        to_emotion TEXT NOT NULL,
+                        speaker TEXT NOT NULL,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                
+                # 既存データを削除
+                cursor.execute("DELETE FROM facial_expressions WHERE project_id = ?", (project_id,))
+                cursor.execute("DELETE FROM emotion_transitions WHERE project_id = ?", (project_id,))
+                
+                # 表情フレームを保存
+                for frame in expression_data.get("expression_frames", []):
+                    cursor.execute("""
+                        INSERT INTO facial_expressions (
+                            project_id, timestamp, speaker, primary_emotion,
+                            emotion_weights, transition_state
+                        ) VALUES (?, ?, ?, ?, ?, ?)
+                    """, (
+                        project_id,
+                        frame["timestamp"],
+                        frame["speaker"],
+                        frame["primary_emotion"],
+                        json.dumps(frame["emotion_weights"]),
+                        frame["transition_state"]
+                    ))
+                
+                # 感情切り替えを保存
+                for transition in expression_data.get("transitions", []):
+                    cursor.execute("""
+                        INSERT INTO emotion_transitions (
+                            project_id, start_time, end_time, from_emotion,
+                            to_emotion, speaker
+                        ) VALUES (?, ?, ?, ?, ?, ?)
+                    """, (
+                        project_id,
+                        transition["start_time"],
+                        transition["end_time"],
+                        transition["from_emotion"],
+                        transition["to_emotion"],
+                        transition["speaker"]
+                    ))
+                
+                conn.commit()
+                self.logger.info(
+                    f"表情データ保存完了: project_id={project_id}, "
+                    f"frames={len(expression_data.get('expression_frames', []))}, "
+                    f"transitions={len(expression_data.get('transitions', []))}"
+                )
+                
+        except Exception as e:
+            self.logger.error(f"表情データ保存エラー: project_id={project_id}: {e}")
+            raise
+    
+    def get_facial_expression_data(self, project_id: str) -> Optional[Dict[str, Any]]:
+        """
+        保存された表情データを取得
+        
+        Args:
+            project_id: プロジェクトID
+            
+        Returns:
+            表情データ、または None
+        """
+        try:
+            with self.db_manager.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # 表情フレームを取得
+                cursor.execute("""
+                    SELECT timestamp, speaker, primary_emotion, emotion_weights, transition_state
+                    FROM facial_expressions
+                    WHERE project_id = ?
+                    ORDER BY timestamp
+                """, (project_id,))
+                
+                frame_results = cursor.fetchall()
+                
+                # 感情切り替えを取得
+                cursor.execute("""
+                    SELECT start_time, end_time, from_emotion, to_emotion, speaker
+                    FROM emotion_transitions
+                    WHERE project_id = ?
+                    ORDER BY start_time
+                """, (project_id,))
+                
+                transition_results = cursor.fetchall()
+                
+                if not frame_results and not transition_results:
+                    return None
+                
+                # 結果を構造化
+                expression_frames = []
+                for row in frame_results:
+                    expression_frames.append({
+                        "timestamp": row[0],
+                        "speaker": row[1],
+                        "primary_emotion": row[2],
+                        "emotion_weights": json.loads(row[3]),
+                        "transition_state": row[4]
+                    })
+                
+                transitions = []
+                for row in transition_results:
+                    transitions.append({
+                        "start_time": row[0],
+                        "end_time": row[1],
+                        "from_emotion": row[2],
+                        "to_emotion": row[3],
+                        "speaker": row[4]
+                    })
+                
+                return {
+                    "project_id": project_id,
+                    "expression_frames": expression_frames,
+                    "transitions": transitions
+                }
+                
+        except Exception as e:
+            self.logger.error(f"表情データ取得エラー: project_id={project_id}: {e}")
             return None 

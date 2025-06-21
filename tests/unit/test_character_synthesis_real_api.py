@@ -504,6 +504,172 @@ class TestCharacterSynthesisRealAPI(unittest.TestCase):
         print(f"   動画: {final_result['character_video_path']}")
         print(f"   時間: {final_result['total_duration']}秒")
         print(f"   口パク: {len(final_result['lip_sync_data'])}フレーム")
+
+    # =================================================================
+    # Phase 4-5-2: 表情制御機能のテストケース（新規追加）
+    # =================================================================
+    
+    def test_09_emotion_transition_detection(self):
+        """テスト09: 表情切り替えタイミングの検出"""
+        # 複数の感情変化を含むテストデータ
+        emotion_transitions = [
+            {"start_time": 0.0, "end_time": 2.0, "emotion": "neutral", "speaker": "reimu"},
+            {"start_time": 2.0, "end_time": 4.0, "emotion": "happy", "speaker": "reimu"},
+            {"start_time": 4.0, "end_time": 6.0, "emotion": "surprised", "speaker": "reimu"}
+        ]
+        
+        # 表情切り替えポイントを検出
+        transition_points = self.synthesizer._detect_emotion_transitions(emotion_transitions)
+        
+        # 検証
+        self.assertIsInstance(transition_points, list)
+        self.assertEqual(len(transition_points), 2)  # 3つの感情 → 2つの切り替え
+        
+        # 切り替えポイントの詳細検証
+        for point in transition_points:
+            self.assertIn("transition_time", point)
+            self.assertIn("from_emotion", point)
+            self.assertIn("to_emotion", point)
+            self.assertIn("speaker", point)
+        
+        # 特定の切り替えを確認
+        first_transition = transition_points[0]
+        self.assertEqual(first_transition["transition_time"], 2.0)
+        self.assertEqual(first_transition["from_emotion"], "neutral")
+        self.assertEqual(first_transition["to_emotion"], "happy")
+        
+        print(f"✅ 表情切り替えタイミング検出成功: {len(transition_points)}個の切り替え検出")
+    
+    def test_10_facial_expression_interpolation(self):
+        """テスト10: 自然な表情変化の補間"""
+        # 表情切り替えデータ
+        transition = {
+            "start_time": 2.0,
+            "end_time": 2.5,  # 0.5秒かけて変化
+            "from_emotion": "neutral",
+            "to_emotion": "happy",
+            "speaker": "reimu"
+        }
+        
+        # 補間フレームを生成（30fps = 15フレーム）
+        interpolated_frames = self.synthesizer._interpolate_facial_expression(
+            transition, frame_rate=30
+        )
+        
+        # 検証
+        self.assertIsInstance(interpolated_frames, list)
+        self.assertEqual(len(interpolated_frames), 15)  # 0.5秒 × 30fps
+        
+        # 各フレームの構造確認
+        for i, frame in enumerate(interpolated_frames):
+            self.assertIn("timestamp", frame)
+            self.assertIn("emotion_weights", frame)
+            self.assertIn("speaker", frame)
+            
+            # 重みの合計は1.0
+            weights = frame["emotion_weights"]
+            total_weight = sum(weights.values())
+            self.assertAlmostEqual(total_weight, 1.0, places=2)
+            
+            # 時間の進行確認
+            expected_time = 2.0 + (i / 30)
+            self.assertAlmostEqual(frame["timestamp"], expected_time, places=3)
+        
+        # 変化の確認（最初はneutral多め、最後はhappy多め）
+        first_frame = interpolated_frames[0]
+        last_frame = interpolated_frames[-1]
+        
+        self.assertGreater(first_frame["emotion_weights"]["neutral"], 0.8)
+        self.assertGreater(last_frame["emotion_weights"]["happy"], 0.8)
+        
+        print(f"✅ 表情補間成功: {len(interpolated_frames)}フレーム生成")
+    
+    def test_11_multi_emotion_priority_handling(self):
+        """テスト11: 複数感情の優先度処理"""
+        # 複数の感情が同時に検出された場合のテストデータ
+        conflicting_emotions = [
+            {"emotion": "happy", "confidence": 0.7, "keywords": ["楽しい"]},
+            {"emotion": "surprised", "confidence": 0.8, "keywords": ["びっくり"]},
+            {"emotion": "neutral", "confidence": 0.6, "keywords": []}
+        ]
+        
+        # 優先度処理
+        primary_emotion = self.synthesizer._resolve_emotion_conflict(conflicting_emotions)
+        
+        # 検証
+        self.assertIsInstance(primary_emotion, dict)
+        self.assertIn("emotion", primary_emotion)
+        self.assertIn("confidence", primary_emotion)
+        self.assertIn("secondary_emotions", primary_emotion)
+        
+        # 最も信頼度の高いsurprisedが選ばれることを確認
+        self.assertEqual(primary_emotion["emotion"], "surprised")
+        self.assertEqual(primary_emotion["confidence"], 0.8)
+        
+        # 副次感情が記録されていることを確認
+        secondary = primary_emotion["secondary_emotions"]
+        self.assertIsInstance(secondary, list)
+        self.assertGreaterEqual(len(secondary), 1)
+        
+        print(f"✅ 感情優先度処理成功: primary={primary_emotion['emotion']}, secondary={len(secondary)}個")
+    
+    def test_12_facial_expression_data_persistence(self):
+        """テスト12: 表情データの保存・取得"""
+        # 表情データ
+        facial_expressions = {
+            "project_id": self.project_id,
+            "expression_frames": [
+                {
+                    "timestamp": 0.0,
+                    "speaker": "reimu",
+                    "primary_emotion": "neutral",
+                    "emotion_weights": {"neutral": 1.0},
+                    "transition_state": "stable"
+                },
+                {
+                    "timestamp": 2.0,
+                    "speaker": "reimu", 
+                    "primary_emotion": "happy",
+                    "emotion_weights": {"happy": 0.7, "neutral": 0.3},
+                    "transition_state": "transitioning"
+                }
+            ],
+            "transitions": [
+                {
+                    "start_time": 1.8,
+                    "end_time": 2.2,
+                    "from_emotion": "neutral",
+                    "to_emotion": "happy",
+                    "speaker": "reimu"
+                }
+            ]
+        }
+        
+        # データベースに保存
+        self.dao.save_facial_expression_data(self.project_id, facial_expressions)
+        
+        # 取得して確認
+        saved_data = self.dao.get_facial_expression_data(self.project_id)
+        
+        # 検証
+        self.assertIsNotNone(saved_data)
+        self.assertEqual(len(saved_data["expression_frames"]), 2)
+        self.assertEqual(len(saved_data["transitions"]), 1)
+        
+        # 詳細データの確認
+        frame1 = saved_data["expression_frames"][0]
+        self.assertEqual(frame1["primary_emotion"], "neutral")
+        self.assertEqual(frame1["transition_state"], "stable")
+        
+        transition1 = saved_data["transitions"][0]
+        self.assertEqual(transition1["from_emotion"], "neutral")
+        self.assertEqual(transition1["to_emotion"], "happy")
+        
+        print(f"✅ 表情データ保存・取得成功: frames={len(saved_data['expression_frames'])}, transitions={len(saved_data['transitions'])}")
+
+    # =================================================================
+    # 既存のヘルパーメソッド
+    # =================================================================
     
     def _create_emotion_analysis_prompt(self, segments: list) -> str:
         """感情分析用プロンプトを作成"""

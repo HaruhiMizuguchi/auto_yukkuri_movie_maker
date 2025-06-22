@@ -341,7 +341,10 @@ class VideoComposer:
         self,
         repository: ProjectRepository,
         config_manager: ConfigManager,
-        file_system_manager: FileSystemManager
+        file_system_manager: FileSystemManager,
+        layer_composer: Optional[LayerComposer] = None,
+        audio_synchronizer: Optional[AudioSynchronizer] = None,
+        quality_controller: Optional[QualityController] = None
     ):
         """
         初期化
@@ -350,15 +353,23 @@ class VideoComposer:
             repository: プロジェクトリポジトリ
             config_manager: 設定マネージャー
             file_system_manager: ファイルシステムマネージャー
+            layer_composer: レイヤー合成器（依存性注入）
+            audio_synchronizer: 音声同期器（依存性注入）
+            quality_controller: 品質制御器（依存性注入）
         """
         self.repository = repository
         self.config_manager = config_manager
         self.file_system_manager = file_system_manager
         self.dao = VideoCompositionDAO(repository.db_manager)
+        
+        # 依存性注入（デフォルトはffmpeg実装）
+        self.layer_composer = layer_composer or FFmpegLayerComposer()
+        self.audio_synchronizer = audio_synchronizer or FFmpegAudioSynchronizer()
+        self.quality_controller = quality_controller or FFmpegQualityController()
 
     async def compose_video(self, input_data: VideoCompositionInput) -> VideoCompositionOutput:
         """
-        動画合成メイン処理
+        動画合成メイン処理（実際のffmpeg実装）
         
         Args:
             input_data: 動画合成入力データ
@@ -369,33 +380,80 @@ class VideoComposer:
         try:
             logger.info(f"動画合成開始: project_id={input_data.project_id}")
             
-            # Mock実装（TDD Green段階）
-            output_path = f"test_output_{input_data.project_id}.mp4"
+            # プロジェクトディレクトリを取得
+            project_dir = Path(self.file_system_manager.get_project_directory(input_data.project_id))
+            output_dir = project_dir / "files" / "video"
+            output_dir.mkdir(parents=True, exist_ok=True)
             
-            # 4-8-1: レイヤー合成
-            layer_metadata = self._compose_video_layers(input_data)
+            # 出力ファイルパス生成
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            temp_layer_output = str(output_dir / f"temp_layers_{timestamp}.mp4")
+            temp_sync_output = str(output_dir / f"temp_sync_{timestamp}.mp4") 
+            final_output = str(output_dir / f"composed_{input_data.project_id}_{timestamp}.mp4")
             
-            # 4-8-2: 音声同期  
-            sync_metadata = self._sync_audio_video(input_data)
+            # 設定を取得
+            config = self.config_manager.get_value("video_composition", {})
+            
+            # 4-8-1: レイヤー合成（背景・立ち絵・字幕）
+            logger.info("レイヤー合成開始")
+            layer_metadata = self.layer_composer.compose_video_layers(
+                background_path=input_data.background_video_path,
+                character_path=input_data.character_video_path,
+                subtitle_path=input_data.subtitle_path,
+                output_path=temp_layer_output,
+                composition_config=input_data.composition_config
+            )
+            
+            # 4-8-2: 音声同期
+            logger.info("音声同期開始")
+            sync_metadata = self.audio_synchronizer.sync_audio_video(
+                video_path=temp_layer_output,
+                audio_path=input_data.audio_path,
+                output_path=temp_sync_output,
+                sync_config=input_data.composition_config
+            )
             
             # 4-8-3: 品質制御
-            quality_metadata = self._apply_quality_control(input_data)
+            logger.info("品質制御開始")
+            quality_metadata = self.quality_controller.apply_quality_control(
+                input_path=temp_sync_output,
+                output_path=final_output,
+                quality_config=config
+            )
             
+            # ファイル情報を取得
+            final_file = Path(final_output)
+            if not final_file.exists():
+                raise VideoComposerError(f"最終動画ファイルが生成されませんでした: {final_output}")
+            
+            file_size = final_file.stat().st_size
+            
+            # メタデータを統合
             composition_metadata = {
-                "duration": 120.5,
-                "resolution": "1920x1080", 
-                "fps": 30,
-                "file_size": 15728640,
-                "created_at": datetime.now().isoformat()
+                "duration": sync_metadata.get("video_duration", 0.0),
+                "resolution": quality_metadata["quality_settings"]["resolution"],
+                "fps": quality_metadata["quality_settings"]["fps"],
+                "file_size": file_size,
+                "bitrate": quality_metadata["quality_settings"]["bitrate"],
+                "codec": quality_metadata["quality_settings"]["codec"],
+                "created_at": datetime.now().isoformat(),
+                "temp_files": [temp_layer_output, temp_sync_output]
             }
             
+            # 合成結果を作成
             output_data = VideoCompositionOutput(
-                composed_video_path=output_path,
+                composed_video_path=final_output,
                 composition_metadata=composition_metadata,
                 layer_metadata=layer_metadata
             )
             
-            logger.info(f"動画合成完了: project_id={input_data.project_id}")
+            # データベースに保存
+            await self._save_composition_result(input_data.project_id, output_data)
+            
+            # 一時ファイルクリーンアップ
+            self._cleanup_temp_files([temp_layer_output, temp_sync_output])
+            
+            logger.info(f"動画合成完了: project_id={input_data.project_id}, output={final_output}")
             return output_data
             
         except Exception as e:
@@ -403,7 +461,7 @@ class VideoComposer:
             raise VideoComposerError(f"動画合成失敗: {e}")
 
     def _compose_video_layers(self, input_data: VideoCompositionInput) -> Dict[str, Any]:
-        """レイヤー合成実行（Mock実装）"""
+        """レイヤー合成実行（後方互換性のため残存）"""
         return {
             "background_layer": {"status": "composed", "duration": 120.0},
             "character_layer": {"status": "composed", "opacity": 1.0},
@@ -411,7 +469,7 @@ class VideoComposer:
         }
 
     def _sync_audio_video(self, input_data: VideoCompositionInput) -> Dict[str, Any]:
-        """音声同期実行（Mock実装）"""
+        """音声同期実行（後方互換性のため残存）"""
         return {
             "sync_status": "synchronized",
             "audio_delay": 0.0,
@@ -420,7 +478,7 @@ class VideoComposer:
         }
 
     def _apply_quality_control(self, input_data: VideoCompositionInput) -> Dict[str, Any]:
-        """品質制御実行（Mock実装）"""
+        """品質制御実行（後方互換性のため残存）"""
         return {
             "quality_settings": {
                 "resolution": "1920x1080",
@@ -431,6 +489,16 @@ class VideoComposer:
             "file_size": 15728640,
             "quality_score": 0.95
         }
+
+    def _cleanup_temp_files(self, temp_files: List[str]) -> None:
+        """一時ファイルクリーンアップ"""
+        for temp_file in temp_files:
+            try:
+                if Path(temp_file).exists():
+                    Path(temp_file).unlink()
+                    logger.debug(f"一時ファイル削除: {temp_file}")
+            except Exception as e:
+                logger.warning(f"一時ファイル削除失敗: {temp_file}, error={e}")
 
     async def _save_composition_result(
         self, 

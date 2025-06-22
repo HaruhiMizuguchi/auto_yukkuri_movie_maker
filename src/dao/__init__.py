@@ -9,11 +9,17 @@ from .script_generation_dao import ScriptGenerationDAO
 from .title_generation_dao import TitleGenerationDAO
 from .tts_generation_dao import TTSGenerationDAO
 from .character_synthesis_dao import CharacterSynthesisDAO
+from .background_generation_dao import BackgroundGenerationDAO
+from .subtitle_generation_dao import SubtitleGenerationDAO
+from .video_composition_dao import VideoCompositionDAO
 
 __all__ = [
     "ThemeSelectionDAO",
     "ScriptGenerationDAO", 
     "TitleGenerationDAO",
     "TTSGenerationDAO",
-    "CharacterSynthesisDAO"
+    "CharacterSynthesisDAO",
+    "BackgroundGenerationDAO",
+    "SubtitleGenerationDAO",
+    "VideoCompositionDAO",
 ] 

@@ -27,6 +27,7 @@ from .character_synthesizer import CharacterSynthesizer
 from .background_generator import BackgroundGenerator
 from .subtitle_generator import SubtitleGenerator
 from .video_composer import VideoComposer
+from .audio_enhancer import AudioEnhancer
 
 __version__ = "1.0.0"
 
@@ -65,5 +66,6 @@ __all__ = [
     "CharacterSynthesizer",
     "BackgroundGenerator",
     "SubtitleGenerator",
-    "VideoComposer"
+    "VideoComposer",
+    "AudioEnhancer",
 ] 

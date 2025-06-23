@@ -12,6 +12,7 @@ from .character_synthesis_dao import CharacterSynthesisDAO
 from .background_generation_dao import BackgroundGenerationDAO
 from .subtitle_generation_dao import SubtitleGenerationDAO
 from .video_composition_dao import VideoCompositionDAO
+from .audio_enhancement_dao import AudioEnhancementDAO
 
 __all__ = [
     "ThemeSelectionDAO",
@@ -22,4 +23,5 @@ __all__ = [
     "BackgroundGenerationDAO",
     "SubtitleGenerationDAO",
     "VideoCompositionDAO",
+    "AudioEnhancementDAO",
 ] 

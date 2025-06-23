@@ -28,6 +28,8 @@ from .background_generator import BackgroundGenerator
 from .subtitle_generator import SubtitleGenerator
 from .video_composer import VideoComposer
 from .audio_enhancer import AudioEnhancer
+from .illustration_inserter import IllustrationInserter
+from .video_encoder import VideoEncoder
 
 __version__ = "1.0.0"
 
@@ -42,9 +44,9 @@ MODULE_STATUS = {
     "background_animation": "実装済み", 
     "subtitle_generation": "実装済み",
     "video_composition": "実装済み",
-    "audio_enhancement": "未実装",
-    "illustration_insertion": "未実装",
-    "final_encoding": "未実装",
+    "audio_enhancement": "実装済み",
+    "illustration_insertion": "実装済み",
+    "final_encoding": "実装済み",
     "youtube_upload": "運用後実装予定"
 }
 
@@ -68,4 +70,6 @@ __all__ = [
     "SubtitleGenerator",
     "VideoComposer",
     "AudioEnhancer",
+    "IllustrationInserter",
+    "VideoEncoder",
 ] 

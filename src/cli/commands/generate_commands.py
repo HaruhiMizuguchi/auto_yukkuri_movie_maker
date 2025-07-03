@@ -66,33 +66,70 @@ def start(ctx: click.Context, project_id: str, step: Optional[str],
                 click.echo(f"実行プラン表示 (ドライラン): {project_id}")
             return
         
-        # TODO: 実際の動画生成ロジックを実装
-        if RICH_AVAILABLE and console:
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                console=console,
-            ) as progress:
-                
-                steps = [
-                    "テーマ選定中...",
-                    "スクリプト生成中...",
-                    "タイトル生成中...",
-                    "音声生成中...",
-                    "アニメーション生成中...",
-                    "背景生成中...",
-                    "字幕生成中...",
-                    "動画合成中...",
-                    "音響効果適用中...",
-                    "最終エンコード中..."
-                ]
-                
-                for step_desc in steps:
-                    task = progress.add_task(step_desc, total=None)
-                    # ここで実際の処理を呼び出す
-                    import time
-                    time.sleep(1)  # デモ用の待機
-                    progress.update(task, completed=True)
+        # ワークフローオーケストレーター統合実行
+        try:
+            from src.cli.core.workflow_orchestrator import WorkflowOrchestrator
+            
+            # オーケストレーター初期化
+            orchestrator = WorkflowOrchestrator()
+            
+            # 非同期実行のため、asyncio実行
+            import asyncio
+            result = asyncio.run(
+                orchestrator.execute_workflow(
+                    project_id=project_id,
+                    start_step=step,
+                    dry_run=False
+                )
+            )
+            
+            if RICH_AVAILABLE and console:
+                if result.get("status") == "completed":
+                    success_panel = Panel(
+                        f"✅ 動画生成が完了しました！\n"
+                        f"実行ステップ: {len(result.get('executed_steps', []))}\n"
+                        f"プロジェクトID: {project_id}",
+                        title="🎉 生成完了",
+                        style="green"
+                    )
+                    console.print(success_panel)
+                else:
+                    error_panel = Panel(
+                        f"動画生成中にエラーが発生しました\n"
+                        f"詳細: {result.get('error', '不明なエラー')}",
+                        title="❌ エラー",
+                        style="red"
+                    )
+                    console.print(error_panel)
+            
+        except ImportError:
+            # フォールバック: オーケストレーターが利用できない場合
+            if RICH_AVAILABLE and console:
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    console=console,
+                ) as progress:
+                    
+                    steps = [
+                        "テーマ選定中...",
+                        "スクリプト生成中...",
+                        "タイトル生成中...",
+                        "音声生成中...",
+                        "アニメーション生成中...",
+                        "背景生成中...",
+                        "字幕生成中...",
+                        "動画合成中...",
+                        "音響効果適用中...",
+                        "最終エンコード中..."
+                    ]
+                    
+                    for step_desc in steps:
+                        task = progress.add_task(step_desc, total=None)
+                        # デモ用の待機
+                        import time
+                        time.sleep(1)
+                        progress.update(task, completed=True)
             
             success_panel = Panel(
                 f"プロジェクト {project_id} の動画生成が完了しました！",
